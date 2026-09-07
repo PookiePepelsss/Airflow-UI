@@ -31,11 +31,6 @@ local Airflow = loadstring(game:HttpGet("https://raw.githubusercontent.com/Pooki
 - [Theme, fonts and assets](#theme-fonts-and-assets)
 - [Behaviour reference](#behaviour-reference)
 - [Full example](#full-example)
-- [Documentation site](#documentation-site)
-- [Files](#files)
-- [Requirements](#requirements)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
 
 ## Quick start
 
