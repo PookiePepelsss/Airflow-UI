@@ -34,6 +34,8 @@ Drag empty space to move, drag the bottom-right grip to resize. Scales down on s
 
 ## Tabs
 
+An empty tab shows a placeholder with its icon and `EmptyText` (default "Nothing here yet").
+
 ```lua
 local Tab = Window:CreateTab({ Name = "Main", Desc = "Movement and actions", Icon = "zap" })
 local Tab = Window:CreateTab("Main", "zap")
@@ -221,6 +223,40 @@ local Toast = Airflow:Notify({
 
 Toast:Dismiss()
 ```
+
+## Confirm and dialog
+
+Call inside a button's callback; the real action goes in the confirm's `Callback`.
+
+```lua
+Tab:CreateButton({
+    Name = "Unload",
+    Callback = function()
+        Airflow:Confirm({
+            Title = "Unload?",
+            Content = "Everything is restored and the window closes.",
+            Icon = "power",
+            ConfirmText = "Unload",
+            CancelText = "Keep",
+            Callback = function()
+                Window:Destroy()
+            end,
+            OnCancel = function() end,
+        })
+    end,
+})
+
+Airflow:Dialog({
+    Title = "Choose",
+    Content = "Pick one.",
+    Buttons = {
+        { Title = "Later", Callback = function() end },
+        { Title = "Now", Variant = "Primary", Callback = function() end },
+    },
+})
+```
+
+`Window:Confirm` / `Window:Dialog` target a specific window. Clicking the dimmed backdrop cancels unless `CloseOnBackdrop = false`.
 
 ## Flags
 
