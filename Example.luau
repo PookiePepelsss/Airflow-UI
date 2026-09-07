@@ -265,6 +265,29 @@ local function applyIcon(imageLabel, icon)
     imageLabel.ImageRectSize = rectSize or Vector2.zero
 end
 
+local function defaultParent()
+    local hidden
+    pcall(function()
+        if typeof(gethui) == "function" then
+            hidden = gethui()
+        end
+    end)
+    if typeof(hidden) == "Instance" then
+        return hidden
+    end
+    local core
+    pcall(function()
+        core = game:GetService("CoreGui")
+        local probe = Instance.new("Folder")
+        probe.Parent = core
+        probe:Destroy()
+    end)
+    if core then
+        return core
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
 local function pointerPosition()
     return UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
 end
@@ -2127,7 +2150,12 @@ function Library:Window(opts)
         end
     end))
 
-    gui.Parent = opts.Parent or LocalPlayer:WaitForChild("PlayerGui")
+    pcall(function()
+        if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+            syn.protect_gui(gui)
+        end
+    end)
+    gui.Parent = opts.Parent or defaultParent()
 
     scale.Scale = 0.9
     body.GroupTransparency = 1
