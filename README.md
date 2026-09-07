@@ -27,6 +27,7 @@ local Airflow = loadstring(game:HttpGet("https://raw.githubusercontent.com/Pooki
   - [Color picker](#color-picker)
 - [Notifications](#notifications)
 - [Flags](#flags)
+- [Configs](#configs)
 - [Icons](#icons)
 - [Theme, fonts and assets](#theme-fonts-and-assets)
 
@@ -130,6 +131,8 @@ local Window = Airflow:CreateWindow({
 | `ToggleUIKeybind` (`Keybind`) | string \| KeyCode | `"RightControl"` | Hides and shows the window. Shown as a key-cap chip in the sidebar footer. |
 | `Size` | UDim2 | `640 × 420` | Window size in pixels. |
 | `MaxNotifications` | number | `4` | The oldest toast is dismissed when the stack would exceed this. |
+| `MinSize` | Vector2 | `480, 320` | Smallest size the resize grip allows. |
+| `ConfigurationSaving` | `{ Enabled, FolderName, FileName }` | `nil` | Turns on auto-save of flagged elements. See [Configs](#configs). |
 | `Parent` | Instance | `PlayerGui` | Where the ScreenGui is placed. |
 
 ### Methods
@@ -141,6 +144,9 @@ local Window = Airflow:CreateWindow({
 | `Window:Toggle(open?)` | `true` shows, `false` hides, `nil` flips. |
 | `Window:SetKeybind(keyCode)` | Changes the hide key and updates the footer chip. |
 | `Window:Notify(opts)` | Same as `Airflow:Notify` but targets this window. |
+| `Window:SaveConfig(name?)` | Writes every flagged element to `<folder>/<name>.json`. Returns `ok, err`. |
+| `Window:LoadConfig(name?, silent?)` | Applies a saved config. `silent` skips callbacks. |
+| `Window:DeleteConfig(name)` / `Window:ListConfigs()` | File helpers. |
 | `Window:Destroy()` | Fades out, disconnects every listener, removes the ScreenGui and unregisters from `Airflow.Windows`. |
 
 ### Properties
@@ -313,6 +319,8 @@ Fov:Set(90)
 | `Flag` | string | `nil` | Registers in `Airflow.Flags`. |
 | `Callback` | function(value) | `nil` | Runs on every change, including while dragging. |
 
+Click the value chip to type an exact number; Enter or clicking away applies it (snapped and clamped).
+
 Returns `Set(value, silent?)`, `Get()`, `.Value`.
 
 ### Dropdown
@@ -483,7 +491,35 @@ for name, element in pairs(Airflow.Flags) do
 end
 ```
 
-A simple config save is a loop over `Airflow.Flags` writing `element:Get()` to JSON, and a load is the reverse with `element:Set(value, true)`.
+Flags are what the config system saves.
+
+## Configs
+
+Flagged elements can be written to and read from JSON files wherever `writefile` / `readfile` exist (executors). Keybinds are stored by key name and colours as RGB.
+
+```lua
+local Window = Airflow:CreateWindow({
+    Name = "Airflow",
+    ConfigurationSaving = { Enabled = true, FolderName = "MyHub", FileName = "default" },
+})
+
+-- tabs and flagged elements
+
+Window:LoadConfig()            -- call last, once every element exists
+
+Window:SaveConfig("pvp")
+Window:LoadConfig("pvp")
+Window:DeleteConfig("pvp")
+print(Window:ListConfigs())
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `Enabled` | `true` | Auto-save 0.5 s after any flagged element changes. |
+| `FolderName` | `"AirflowUI"` | Folder under the executor workspace. |
+| `FileName` | `"default"` | Config used when `SaveConfig` / `LoadConfig` get no name. |
+
+`Tab:CreateConfigManager({ Name })` drops a ready-made group into a tab: a name input, a dropdown of saved configs, Save / Load / Delete buttons and an auto-save toggle. It returns `Save(name?)`, `Load(name?)`, `Delete(name?)`, `Refresh()`. `LoadConfiguration` / `SaveConfiguration` are accepted as Rayfield-style aliases.
 
 ## Icons
 
@@ -538,7 +574,3 @@ Airflow.Fonts.Bold = Font.new(family, Enum.FontWeight.SemiBold)
 | `Error` | 240, 120, 120 | Notification title tint |
 
 Fonts default to Builder Sans (`rbxasset://fonts/families/BuilderSans.json`) at Regular, Medium and SemiBold. Assets: `Shadow` (sliced drop shadow), `Glow` (radial glow used behind icons and as ambient decals), `Logo`.
-- **Camera** - max zoom slider, camera-mode dropdown (with search), shift lock toggle, blur and colour-correction effects with sliders, tint picker, blur keybind
-- **Server** - live player count label, place/job paragraph, spectate dropdown with refresh, rejoin, clipboard input
-- **Settings** - UI keybind, config inputs, accent preview picker, quick-notify keybind, Discord / Website buttons, about paragraph, unload button that restores everything it changed
-
