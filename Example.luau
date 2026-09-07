@@ -381,22 +381,23 @@ local function hoverStroke(target, strokeObject)
     end)
 end
 
+local KEY_NAMES = {
+    [Enum.KeyCode.LeftControl] = "LCtrl",
+    [Enum.KeyCode.RightControl] = "RCtrl",
+    [Enum.KeyCode.LeftShift] = "LShift",
+    [Enum.KeyCode.RightShift] = "RShift",
+    [Enum.KeyCode.LeftAlt] = "LAlt",
+    [Enum.KeyCode.RightAlt] = "RAlt",
+    [Enum.KeyCode.Return] = "Enter",
+    [Enum.KeyCode.Escape] = "Esc",
+    [Enum.KeyCode.Backspace] = "Backspace",
+}
+
 local function keyName(keyCode)
     if keyCode == nil then
         return "None"
     end
-    local names = {
-        [Enum.KeyCode.LeftControl] = "LCtrl",
-        [Enum.KeyCode.RightControl] = "RCtrl",
-        [Enum.KeyCode.LeftShift] = "LShift",
-        [Enum.KeyCode.RightShift] = "RShift",
-        [Enum.KeyCode.LeftAlt] = "LAlt",
-        [Enum.KeyCode.RightAlt] = "RAlt",
-        [Enum.KeyCode.Return] = "Enter",
-        [Enum.KeyCode.Escape] = "Esc",
-        [Enum.KeyCode.Backspace] = "Backspace",
-    }
-    return names[keyCode] or keyCode.Name
+    return KEY_NAMES[keyCode] or keyCode.Name
 end
 
 local function safeCall(callback, ...)
@@ -422,7 +423,7 @@ local function card(tab, className, height, opts)
         props.Text = ""
     end
     local frame = create(className, props)
-    frame:SetAttribute("NoDrag", true)
+    table.insert(tab.Window._controls, frame)
     corner(frame)
     local frameStroke = stroke(frame, Theme.Stroke)
     return frame, frameStroke
@@ -1154,12 +1155,14 @@ function Tab:Dropdown(opts)
         end
         for option, button in pairs(optionButtons) do
             local on = selected[option] == true
-            tween(button.Label, { TextColor3 = on and Theme.Text or Theme.Muted }, 0.15)
-            tween(button.Stroke, { Color = Theme.Stroke }, 0.15)
-            tween(button.Dot, {
-                BackgroundColor3 = on and Theme.Accent or Theme.Surface3,
-                Size = on and UDim2.fromOffset(8, 8) or UDim2.fromOffset(6, 6),
-            }, 0.2, Enum.EasingStyle.Back)
+            if button.On ~= on then
+                button.On = on
+                tween(button.Label, { TextColor3 = on and Theme.Text or Theme.Muted }, 0.15)
+                tween(button.Dot, {
+                    BackgroundColor3 = on and Theme.Accent or Theme.Surface3,
+                    Size = on and UDim2.fromOffset(8, 8) or UDim2.fromOffset(6, 6),
+                }, 0.2, Enum.EasingStyle.Back)
+            end
         end
     end
 
@@ -1201,16 +1204,19 @@ function Tab:Dropdown(opts)
         local index = 0
         for _, option in ipairs(options) do
             local button = optionButtons[option]
-            if button then
+            if button and button.Frame.Visible then
                 index = index + 1
-                local delay = open and (index - 1) * 0.03 or 0
-                task.delay(delay, function()
-                    tween(button.Frame, { Position = UDim2.fromOffset(0, open and 0 or -6) }, 0.25, Enum.EasingStyle.Quint)
-                    tween(button.Label, { TextTransparency = open and 0 or 1 }, 0.2)
-                    tween(button.Dot, { BackgroundTransparency = open and 0 or 1 }, 0.2)
-                    tween(button.Stroke, { Transparency = open and 0 or 1 }, 0.2)
-                    tween(button.Frame, { BackgroundTransparency = open and 0 or 1 }, 0.2)
-                end)
+                local function show()
+                    button.Dot.BackgroundTransparency = open and 0 or 1
+                    tween(button.Label, { TextTransparency = open and 0 or 1 }, 0.18)
+                    tween(button.Stroke, { Transparency = open and 0 or 1 }, 0.18)
+                    tween(button.Frame, { BackgroundTransparency = open and 0 or 1 }, 0.18)
+                end
+                if open and index > 1 then
+                    task.delay((index - 1) * 0.025, show)
+                else
+                    show()
+                end
             end
         end
     end
@@ -1274,7 +1280,7 @@ function Tab:Dropdown(opts)
                     setOpen(false)
                 end
             end)
-            optionButtons[option] = { Frame = button, Label = text_, Dot = dot, Stroke = optionStroke }
+            optionButtons[option] = { Frame = button, Label = text_, Dot = dot, Stroke = optionStroke, On = nil }
         end
         applyFilter()
         if self_.Open then
@@ -1811,7 +1817,19 @@ function Tab:ConfigManager(opts)
         manager:Load()
     end })
     self:Button({ Name = "Delete", Icon = "trash-2", Callback = function()
-        manager:Delete()
+        local name = list:Get()
+        if not name then
+            return
+        end
+        window:Confirm({
+            Title = "Delete config",
+            Content = "Remove " .. name .. "? This cannot be undone.",
+            Icon = "trash-2",
+            ConfirmText = "Delete",
+            Callback = function()
+                manager:Delete(name)
+            end,
+        })
     end })
     self:Toggle({
         Name = "Auto save",
@@ -1855,6 +1873,7 @@ function Library:Window(opts)
         Open = true,
         Keybind = keybind,
         _connections = {},
+        _controls = {},
         _destroyed = false,
     }, Window)
 
@@ -1907,7 +1926,6 @@ function Library:Window(opts)
     glow(body, UDim2.fromOffset(500, 180), UDim2.new(0.5, 0, 1, 8), 0.86, 270)
     glow(body, UDim2.fromOffset(130, 60), UDim2.new(0, -10, 1, -10), 0.75, 90)
     glow(body, UDim2.fromOffset(520, 240), UDim2.new(1, -14, 0, 10), 0.92, 90)
-    glow(body, UDim2.fromOffset(90, 180), UDim2.new(0, 6, 0, -6), 0.78, 90)
 
     local sidebar = create("Frame", {
         Name = "Sidebar",
@@ -2051,6 +2069,7 @@ function Library:Window(opts)
         Parent = content,
     })
     corner(closeButton, UDim.new(0, 8))
+    table.insert(self._controls, closeButton)
     closeButton.MouseEnter:Connect(function()
         tween(closeButton, { BackgroundTransparency = 0, TextColor3 = Theme.Text }, 0.15)
     end)
@@ -2076,7 +2095,7 @@ function Library:Window(opts)
     create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
         VerticalAlignment = Enum.VerticalAlignment.Bottom,
-        Padding = UDim.new(0, 6),
+        Padding = UDim.new(0, 4),
         Parent = notifyHolder,
     })
     self.NotifyHolder = notifyHolder
@@ -2154,6 +2173,20 @@ function Library:Notify(opts)
     end
 end
 
+function Library:Confirm(opts)
+    local window = Library.Windows[#Library.Windows]
+    if window then
+        return window:Confirm(opts)
+    end
+end
+
+function Library:Dialog(opts)
+    local window = Library.Windows[#Library.Windows]
+    if window then
+        return window:Dialog(opts)
+    end
+end
+
 local function pointInside(point, object)
     local position, size = object.AbsolutePosition, object.AbsoluteSize
     return point.X >= position.X and point.X <= position.X + size.X
@@ -2176,11 +2209,11 @@ local function isShown(object, stopAt, point)
 end
 
 function Window:_overControl(point)
-    for _, object in ipairs(self.Body:GetDescendants()) do
-        if object:IsA("GuiObject")
-            and (object:GetAttribute("NoDrag") or object:IsA("GuiButton") or object:IsA("TextBox"))
-            and pointInside(point, object)
-            and isShown(object, self.Body, point) then
+    if self._dialog then
+        return true
+    end
+    for _, object in ipairs(self._controls) do
+        if object.Parent and pointInside(point, object) and isShown(object, self.Body, point) then
             return true
         end
     end
@@ -2333,24 +2366,33 @@ function Window:_showLoader(opts)
     local logoGlow = create("ImageLabel", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromScale(2.6, 2.6),
+        Size = UDim2.fromScale(1.2, 1.2),
         BackgroundTransparency = 1,
         Image = Assets.Glow,
         ImageColor3 = Theme.Accent,
-        ImageTransparency = 0.85,
+        ImageTransparency = 1,
         ZIndex = 0,
         Parent = logoHolder,
     })
     local logo = create("ImageLabel", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromScale(0.85, 0.85),
+        Size = UDim2.fromScale(0.5, 0.5),
+        Rotation = -14,
         BackgroundTransparency = 1,
         ImageColor3 = Theme.Accent,
+        ImageTransparency = 1,
         ScaleType = Enum.ScaleType.Fit,
         Parent = logoHolder,
     })
     applyIcon(logo, opts.Icon or Assets.Logo)
+    task.delay(0.15, function()
+        tween(logo, { Size = UDim2.fromScale(0.85, 0.85), Rotation = 0, ImageTransparency = 0 }, 0.6, Enum.EasingStyle.Back)
+        tween(logoGlow, { Size = UDim2.fromScale(3.2, 3.2), ImageTransparency = 0.55 }, 0.7, Enum.EasingStyle.Quint)
+        task.delay(0.7, function()
+            tween(logoGlow, { Size = UDim2.fromScale(2.6, 2.6), ImageTransparency = 0.8 }, 0.8, Enum.EasingStyle.Sine)
+        end)
+    end)
     label({
         Position = UDim2.fromOffset(78, 30),
         Size = UDim2.new(1, -100, 0, 22),
@@ -2404,11 +2446,6 @@ function Window:_showLoader(opts)
     tween(loader, { GroupTransparency = 0, Position = UDim2.fromScale(0.5, 0.5) }, 0.4, Enum.EasingStyle.Quint)
     tween(loaderScale, { Scale = 1 }, 0.5, Enum.EasingStyle.Back)
     tween(loaderShadow, { ImageTransparency = 0.6 }, 0.4)
-    local pulse = TweenService:Create(logoGlow, TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
-        ImageTransparency = 0.6,
-        Size = UDim2.fromScale(3, 3),
-    })
-    pulse:Play()
     local sweep = TweenService:Create(sheen, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1), {
         Position = UDim2.fromScale(1, 0),
     })
@@ -2429,7 +2466,6 @@ function Window:_showLoader(opts)
     task.delay(duration, function()
         tween(fill, { Size = UDim2.fromScale(1, 1) }, 0.25, Enum.EasingStyle.Quint)
         task.delay(0.25, function()
-            pulse:Cancel()
             sweep:Cancel()
             tween(loader, { GroupTransparency = 1, Position = UDim2.new(0.5, 0, 0.5, -12) }, 0.3, Enum.EasingStyle.Quint)
             tween(loaderScale, { Scale = 0.94 }, 0.3, Enum.EasingStyle.Quint)
@@ -2573,9 +2609,11 @@ function Window:_enableResize(minSize)
         Parent = grip,
     })
 
+    table.insert(self._controls, grip)
     local resizing = false
     local initialSize = self.Root.Size
     local initialPointer = Vector2.zero
+    local targetSize = nil
 
     grip.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -2599,21 +2637,30 @@ function Window:_enableResize(minSize)
         if resizing and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
             resizing = false
             tween(gripImage, { ImageTransparency = 0.8 }, 0.17)
+            if targetSize then
+                self.Root.Size = UDim2.fromOffset(targetSize.X, targetSize.Y)
+                targetSize = nil
+            end
             self:_fitToScreen()
             self:_clampToScreen()
         end
     end))
-    table.insert(self._connections, UserInputService.InputChanged:Connect(function(input)
+    table.insert(self._connections, RunService.RenderStepped:Connect(function(deltaTime)
         if not resizing then
             return
         end
-        if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
         local delta = (pointerPosition() - initialPointer) / self.Scale.Scale
-        local width = math.clamp(initialSize.X.Offset + delta.X * 2, minSize.X, maxSize.X)
-        local height = math.clamp(initialSize.Y.Offset + delta.Y * 2, minSize.Y, maxSize.Y)
-        tween(self.Root, { Size = UDim2.fromOffset(width, height) }, 0.08, Enum.EasingStyle.Quad)
+        targetSize = Vector2.new(
+            math.clamp(initialSize.X.Offset + delta.X * 2, minSize.X, maxSize.X),
+            math.clamp(initialSize.Y.Offset + delta.Y * 2, minSize.Y, maxSize.Y)
+        )
+        local current = Vector2.new(self.Root.Size.X.Offset, self.Root.Size.Y.Offset)
+        local alpha = 1 - math.exp(-deltaTime * 35)
+        local step = current:Lerp(targetSize, alpha)
+        step = Vector2.new(math.floor(step.X + 0.5), math.floor(step.Y + 0.5))
+        if step ~= current then
+            self.Root.Size = UDim2.fromOffset(step.X, step.Y)
+        end
     end))
 end
 
@@ -2774,6 +2821,7 @@ function Window:Tab(opts, icon)
     corner(button)
     local buttonStroke = stroke(button, Theme.Stroke, 1)
     tab._button = button
+    table.insert(self._controls, button)
 
     local hasIcon = opts.Icon ~= nil
     if hasIcon then
@@ -2845,6 +2893,47 @@ function Window:Tab(opts, icon)
     })
     tab.List = list
 
+    local empty = create("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, -10),
+        Size = UDim2.fromOffset(200, 70),
+        BackgroundTransparency = 1,
+        Parent = page,
+    })
+    local emptyIcon = create("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, 0),
+        Size = UDim2.fromOffset(26, 26),
+        BackgroundTransparency = 1,
+        ImageColor3 = Theme.Muted,
+        ImageTransparency = 0.4,
+        ScaleType = Enum.ScaleType.Fit,
+        Parent = empty,
+    })
+    applyIcon(emptyIcon, opts.Icon or "layout-grid")
+    label({
+        Position = UDim2.fromOffset(0, 36),
+        Size = UDim2.new(1, 0, 0, 16),
+        Text = opts.EmptyText or "Nothing here yet",
+        TextSize = 13,
+        FontFace = Fonts.Regular,
+        TextColor3 = Theme.Muted,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        Parent = empty,
+    })
+    local function refreshEmpty()
+        local count = 0
+        for _, child in ipairs(list:GetChildren()) do
+            if child:IsA("GuiObject") then
+                count += 1
+            end
+        end
+        empty.Visible = count == 0
+    end
+    list.ChildAdded:Connect(refreshEmpty)
+    list.ChildRemoved:Connect(refreshEmpty)
+    refreshEmpty()
+
     local labelX = hasIcon and 36 or 14
     button.MouseEnter:Connect(function()
         tween(tab._label, { Position = UDim2.fromOffset(labelX + 3, 0) }, 0.2)
@@ -2878,6 +2967,211 @@ function Window:Tab(opts, icon)
 end
 
 Window.CreateTab = Window.Tab
+
+function Window:Dialog(opts)
+    opts = normalize(opts, { Text = "Content", Message = "Content" })
+    if self._dialog then
+        self._dialog.Close()
+    end
+    local WIDTH = 300
+    local PAD = 18
+
+    local overlay = create("TextButton", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = Color3.new(0, 0, 0),
+        BackgroundTransparency = 1,
+        Text = "",
+        AutoButtonColor = false,
+        ZIndex = 40,
+        Parent = self.Body,
+    })
+    local card = create("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 10),
+        Size = UDim2.fromOffset(WIDTH, 120),
+        BackgroundColor3 = Theme.Background,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ZIndex = 41,
+        Parent = overlay,
+    })
+    corner(card, UDim.new(0, 10))
+    local cardStroke = stroke(card, Theme.Stroke, 1)
+    local cardScale = create("UIScale", { Scale = 0.94, Parent = card })
+    local fading = {}
+
+    local titleOffset = 0
+    if opts.Icon then
+        local holder, image = glowIcon(card, opts.Icon, Theme.Accent, UDim2.new(0, PAD, 0, PAD + 9))
+        image.ImageTransparency = 1
+        holder.ZIndex = 42
+        image.ZIndex = 42
+        table.insert(fading, { image, "ImageTransparency", 0 })
+        titleOffset = 24
+    end
+    local title = label({
+        Position = UDim2.fromOffset(PAD + titleOffset, PAD),
+        Size = UDim2.new(1, -(PAD * 2 + titleOffset), 0, 18),
+        Text = opts.Title or "Are you sure?",
+        TextSize = 15,
+        TextTransparency = 1,
+        ZIndex = 42,
+        Parent = card,
+    })
+    table.insert(fading, { title, "TextTransparency", 0 })
+
+    local contentHeight = 0
+    if opts.Content then
+        local content = label({
+            Position = UDim2.fromOffset(PAD, PAD + 24),
+            Size = UDim2.new(1, -PAD * 2, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            Text = opts.Content,
+            TextSize = 13,
+            FontFace = Fonts.Regular,
+            TextColor3 = Theme.Muted,
+            TextWrapped = true,
+            TextTransparency = 1,
+            TextTruncate = Enum.TextTruncate.None,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            ZIndex = 42,
+            Parent = card,
+        })
+        table.insert(fading, { content, "TextTransparency", 0 })
+        contentHeight = math.max(content.TextBounds.Y, 16) + 6
+    end
+
+    local row = create("Frame", {
+        Position = UDim2.fromOffset(PAD, PAD + 24 + contentHeight + 12),
+        Size = UDim2.new(1, -PAD * 2, 0, 34),
+        BackgroundTransparency = 1,
+        ZIndex = 42,
+        Parent = card,
+    })
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        HorizontalAlignment = Enum.HorizontalAlignment.Right,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 8),
+        Parent = row,
+    })
+    card.Size = UDim2.fromOffset(WIDTH, PAD + 24 + contentHeight + 12 + 34 + PAD)
+
+    local dialog = {}
+    local closed = false
+    function dialog.Close()
+        if closed then
+            return
+        end
+        closed = true
+        if self._dialog == dialog then
+            self._dialog = nil
+        end
+        tween(overlay, { BackgroundTransparency = 1 }, 0.18)
+        tween(card, { BackgroundTransparency = 1, Position = UDim2.new(0.5, 0, 0.5, 8) }, 0.18, Enum.EasingStyle.Quint)
+        tween(cardScale, { Scale = 0.96 }, 0.18, Enum.EasingStyle.Quint)
+        tween(cardStroke, { Transparency = 1 }, 0.12)
+        for _, entry in ipairs(fading) do
+            tween(entry[1], { [entry[2]] = 1 }, 0.12)
+        end
+        task.delay(0.2, function()
+            overlay:Destroy()
+        end)
+    end
+
+    for index, spec in ipairs(opts.Buttons or {}) do
+        local primary = spec.Variant == "Primary"
+        local buttonFrame = create("TextButton", {
+            Size = UDim2.fromOffset(0, 34),
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundColor3 = primary and Theme.Accent or Theme.Surface2,
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Text = "",
+            AutoButtonColor = false,
+            ClipsDescendants = true,
+            LayoutOrder = index,
+            ZIndex = 43,
+            Parent = row,
+        })
+        corner(buttonFrame, UDim.new(0, 7))
+        local buttonStroke = stroke(buttonFrame, primary and Theme.Accent or Theme.Stroke, 1)
+        padding(buttonFrame, 14, 14)
+        local text = label({
+            Size = UDim2.new(0, 0, 1, 0),
+            AutomaticSize = Enum.AutomaticSize.X,
+            Text = spec.Title or spec.Name or "OK",
+            TextSize = 13,
+            TextColor3 = primary and Theme.AccentDark or Theme.Text,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            TextTransparency = 1,
+            ZIndex = 44,
+            Parent = buttonFrame,
+        })
+        local restBg = primary and 0.12 or 0
+        local restStroke = primary and 0.4 or 0
+        table.insert(fading, { buttonFrame, "BackgroundTransparency", restBg })
+        table.insert(fading, { buttonStroke, "Transparency", restStroke })
+        table.insert(fading, { text, "TextTransparency", 0 })
+        buttonFrame.MouseEnter:Connect(function()
+            if closed then
+                return
+            end
+            if primary then
+                tween(buttonFrame, { BackgroundTransparency = 0 }, 0.12)
+                tween(buttonStroke, { Transparency = 0 }, 0.12)
+            else
+                tween(buttonStroke, { Color = Theme.StrokeHover }, 0.12)
+            end
+        end)
+        buttonFrame.MouseLeave:Connect(function()
+            if closed then
+                return
+            end
+            if primary then
+                tween(buttonFrame, { BackgroundTransparency = restBg }, 0.2)
+                tween(buttonStroke, { Transparency = restStroke }, 0.2)
+            else
+                tween(buttonStroke, { Color = Theme.Stroke }, 0.2)
+            end
+        end)
+        buttonFrame.MouseButton1Click:Connect(function()
+            dialog.Close()
+            safeCall(spec.Callback)
+        end)
+    end
+
+    if opts.CloseOnBackdrop ~= false then
+        overlay.MouseButton1Click:Connect(function()
+            dialog.Close()
+            safeCall(opts.OnCancel)
+        end)
+    end
+
+    self._dialog = dialog
+    tween(overlay, { BackgroundTransparency = 0.45 }, 0.25)
+    tween(card, { BackgroundTransparency = 0, Position = UDim2.fromScale(0.5, 0.5) }, 0.3, Enum.EasingStyle.Quint)
+    tween(cardStroke, { Transparency = 0 }, 0.25)
+    tween(cardScale, { Scale = 1 }, 0.4, Enum.EasingStyle.Back)
+    for _, entry in ipairs(fading) do
+        tween(entry[1], { [entry[2]] = entry[3] }, 0.25)
+    end
+    return dialog
+end
+
+function Window:Confirm(opts)
+    opts = normalize(opts, { Text = "Content", Message = "Content" })
+    return self:Dialog({
+        Title = opts.Title or "Are you sure?",
+        Content = opts.Content,
+        Icon = opts.Icon,
+        OnCancel = opts.OnCancel,
+        Buttons = {
+            { Title = opts.CancelText or "Cancel", Callback = opts.OnCancel },
+            { Title = opts.ConfirmText or "Confirm", Variant = "Primary", Callback = opts.Callback },
+        },
+    })
+end
 
 function Window:_placeIndicator(tab)
     local indicator = self.Indicator
@@ -3021,7 +3315,7 @@ function Window:Notify(opts)
         BackgroundTransparency = 1,
         Parent = toast,
     })
-    padding(inner, 16, 16, 12, 14)
+    padding(inner, 16, 16, 14, 24)
 
     local titleOffset = 0
     if opts.Icon then
@@ -3056,7 +3350,7 @@ function Window:Notify(opts)
     end)
     if opts.Content then
         label({
-            Position = UDim2.fromOffset(titleOffset, 19),
+            Position = UDim2.fromOffset(titleOffset, 21),
             Size = UDim2.new(1, -titleOffset, 0, 0),
             AutomaticSize = Enum.AutomaticSize.Y,
             Text = opts.Content,
@@ -3072,7 +3366,7 @@ function Window:Notify(opts)
 
     local track = create("Frame", {
         AnchorPoint = Vector2.new(0, 1),
-        Position = UDim2.new(0, 16, 1, -6),
+        Position = UDim2.new(0, 16, 1, -8),
         Size = UDim2.new(1, -32, 0, 3),
         BackgroundColor3 = Theme.Surface3,
         BorderSizePixel = 0,
@@ -3469,6 +3763,8 @@ Info:CreateButton({
     end,
 })
 
+Window:CreateTab({ Name = "Extra", Desc = "Empty tab placeholder", Icon = "package" })
+
 local Settings = Window:CreateTab({ Name = "Settings", Desc = "Interface", Icon = "settings" })
 
 Settings:CreateSection("Interface")
@@ -3505,16 +3801,24 @@ Settings:CreateButton({
     Desc = "Restores lighting and destroys the interface",
     Icon = "power",
     Callback = function()
-        Lighting.ClockTime = saved.ClockTime
-        Lighting.Brightness = saved.Brightness
-        Lighting.Ambient = saved.Ambient
-        Lighting.OutdoorAmbient = saved.OutdoorAmbient
-        workspace.CurrentCamera.FieldOfView = saved.Fov
-        speedEnabled = false
-        applyMovement()
-        highlightsOn = false
-        clearHighlights()
-        Window:Destroy()
+        Airflow:Confirm({
+            Title = "Unload Airflow?",
+            Content = "Lighting and movement are restored and the window closes.",
+            Icon = "power",
+            ConfirmText = "Unload",
+            Callback = function()
+                Lighting.ClockTime = saved.ClockTime
+                Lighting.Brightness = saved.Brightness
+                Lighting.Ambient = saved.Ambient
+                Lighting.OutdoorAmbient = saved.OutdoorAmbient
+                workspace.CurrentCamera.FieldOfView = saved.Fov
+                speedEnabled = false
+                applyMovement()
+                highlightsOn = false
+                clearHighlights()
+                Window:Destroy()
+            end,
+        })
     end,
 })
 
@@ -3522,7 +3826,7 @@ Window:LoadConfig()
 
 Airflow:Notify({
     Title = "Airflow ready",
-    Content = "4 tabs loaded. RCtrl hides the window.",
+    Content = "5 tabs loaded. RCtrl hides the window.",
     Icon = "check",
     Type = "Success",
     Duration = 4,
