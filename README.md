@@ -131,6 +131,10 @@ local Window = Airflow:CreateWindow({
 | `ToggleUIKeybind` (`Keybind`) | string \| KeyCode | `"RightControl"` | Hides and shows the window. Shown as a key-cap chip in the sidebar footer. |
 | `Size` | UDim2 | `640 × 420` | Window size in pixels. |
 | `MaxNotifications` | number | `4` | The oldest toast is dismissed when the stack would exceed this. |
+| `Loading` | boolean | `true` | `false` skips the loading card and opens the window immediately. |
+| `LoadingDuration` | number | `1.6` | Seconds the loading card stays before the window animates in. |
+| `LoadingText` | string | subtitle | First status line on the loading card. |
+| `LoadingSteps` | `{ string }` | 3 built-in lines | Status lines cycled evenly across the duration. |
 | `MinSize` | Vector2 | `480, 320` | Smallest size the resize grip allows. |
 | `ConfigurationSaving` | `{ Enabled, FolderName, FileName }` | `nil` | Turns on auto-save of flagged elements. See [Configs](#configs). |
 | `Parent` | Instance | `PlayerGui` | Where the ScreenGui is placed. |
