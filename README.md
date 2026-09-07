@@ -119,6 +119,11 @@ local Window = Airflow:CreateWindow({
     ToggleUIKeybind = "RightControl",
     Size = UDim2.fromOffset(640, 420),
     MaxNotifications = 4,
+    Loading = {
+        Title = "Airflow",
+        Steps = { "Preparing interface", "Loading icons", "Almost there" },
+        Duration = 2,
+    },
     Parent = nil,
 })
 ```
@@ -128,14 +133,17 @@ local Window = Airflow:CreateWindow({
 | `Name` (`Title`) | string | `"Airflow"` | Title in the sidebar header. Also names the ScreenGui. |
 | `LoadingSubtitle` (`Subtitle`) | string | `""` | Small line under the title. |
 | `Icon` | string \| table | bird logo | Header mark. Lucide name, asset id, or sprite table. |
-| `ToggleUIKeybind` (`Keybind`) | string \| KeyCode | `"RightControl"` | Hides and shows the window. Shown as a key-cap chip in the sidebar footer. |
+| `ToggleUIKeybind` (`Keybind`) | string \| KeyCode | `"RightControl"` | Hides and shows the window. Accepts a KeyCode name (`"RightShift"`, `"LeftAlt"`, `"Insert"`, `"Home"`, `"F1"`, `"Backquote"`) or an `Enum.KeyCode`. Shown as a key-cap chip in the sidebar footer. |
 | `Size` | UDim2 | `640 × 420` | Window size in pixels. |
 | `MaxNotifications` | number | `4` | The oldest toast is dismissed when the stack would exceed this. |
-| `Loading` | boolean | `true` | `false` skips the loading card and opens the window immediately. |
-| `LoadingDuration` | number | `1.6` | Seconds the loading card stays before the window animates in. |
+| `Loading` | boolean \| table | `true` | `false` skips the loading card. A table configures it: `{ Enabled, Title, Text, Steps, Duration }`. |
+| `LoadingTitle` | string | `Name` | Title shown on the loading card. |
 | `LoadingText` | string | subtitle | First status line on the loading card. |
 | `LoadingSteps` | `{ string }` | 3 built-in lines | Status lines cycled evenly across the duration. |
+| `LoadingDuration` | number | `1.6` | Seconds the loading card stays before the window animates in. |
 | `MinSize` | Vector2 | `480, 320` | Smallest size the resize grip allows. |
+| `MaxSize` | Vector2 | unlimited | Largest size the resize grip allows. |
+| `OpenButton` | boolean \| `{ Title, Icon }` | on for touch-only devices | Floating, draggable pill that shows or hides the window. Pass `true`/`false` to force it, or a table to customise. |
 | `ConfigurationSaving` | `{ Enabled, FolderName, FileName }` | `nil` | Turns on auto-save of flagged elements. See [Configs](#configs). |
 | `Parent` | Instance | `PlayerGui` | Where the ScreenGui is placed. |
 
@@ -164,6 +172,9 @@ local Window = Airflow:CreateWindow({
 | `Window.CurrentTab` | The selected tab. |
 | `Window.Open` | Whether the window is currently shown. |
 | `Window.Keybind` | Current hide key. |
+| `Window.OpenButton` | The floating pill, when created. |
+
+The window scales itself to fit small viewports (down to 45%), is kept inside the screen after every drag, resize or viewport change, and notifications shrink to fit narrow screens.
 
 ## Tabs
 
@@ -426,7 +437,7 @@ Bind:Set(Enum.KeyCode.G)
 | `Callback` | function(keyCode) | `nil` | Runs when the bound key is pressed and no text box has focus. |
 | `OnChanged` | function(keyCode) | `nil` | Runs when the user rebinds. |
 
-Click the chip to listen; the next key binds, Escape cancels. Returns `Set(keyCode, silent?)`, `.Value`, `.Listening`.
+Click the chip to listen; the next key binds, Escape cancels. Returns `Set(keyCode, silent?)`, `Get()`, `.Value`, `.Listening`.
 
 ### Color picker
 
@@ -499,7 +510,7 @@ Flags are what the config system saves.
 
 ## Configs
 
-Flagged elements can be written to and read from JSON files wherever `writefile` / `readfile` exist (executors). Keybinds are stored by key name and colours as RGB.
+Flagged elements can be written to and read from JSON files wherever `writefile` / `readfile` exist (executors). Keybinds are stored by key name and colours as three 0–1 RGB components.
 
 ```lua
 local Window = Airflow:CreateWindow({
