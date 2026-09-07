@@ -1,1 +1,624 @@
-local t="RightControl"local h=game:GetService"Players"local b=game:GetService"Lighting"local u=game:GetService"UserInputService"local a=h.LocalPlayer local d=loadstring(game:HttpGet"https://raw.githubusercontent.com/PookiePepelsss/Airflow-UI/refs/heads/main/Source.luau")()d:PreloadIcons()local k=d:CreateWindow{Name="Airflow",LoadingSubtitle="Example build",ToggleUIKeybind=t,Size=UDim2.fromOffset(640,420)}local e=k:CreateTab{Name="Main",Desc="Movement, inputs and keybinds",Icon="zap"}e:CreateSection"Movement"local v,m=16,false local function n()local b=a.Character local c=b and b:FindFirstChildOfClass"Humanoid"if c then c.WalkSpeed=m and v or 16 end end e:CreateToggle{Name="Speed boost",Desc="Applies the slider value to WalkSpeed",CurrentValue=false,Callback=function(a)m=a n()end}e:CreateSlider{Name="Walk speed",Range={16,120},Increment=1,CurrentValue=16,Suffix=" st/s",Callback=function(a)v=a n()end}e:CreateSlider{Name="Field of view",Range={50,120},Increment=.5,CurrentValue=70,Callback=function(a)workspace.CurrentCamera.FieldOfView=a end}e:CreateSection"Actions"e:CreateButton{Name="Reset character",Desc="Respawns you at the last spawn point",Callback=function()local b=a.Character local c=b and b:FindFirstChildOfClass"Humanoid"if c then c.Health=0 end end}e:CreateButton{Name="Send test notification",Style="Primary",Callback=function()d:Notify{Title="Hello",Content="This toast dismisses on its own or on click.",Duration=4,Type="Success"}end}e:CreateKeybind{Name="Speed toggle key",Desc="Press to flip the speed boost",CurrentKeybind="F",Callback=function()m=not m n()d:Notify{Title="Speed boost",Content=m and"Enabled"or"Disabled",Duration=2}end,OnChanged=function(a)d:Notify{Title="Rebound",Content="Speed toggle is now "..a.Name,Duration=2,Type="Info"}end}e:CreateSection"Inputs"local w=50 e:CreateInput{Name="Jump power",Desc="Applied on Enter",PlaceholderText="50",Numeric=true,Callback=function(c,d)local b=tonumber(c)if d and b then w=math.clamp(b,0,500)local d=a.Character local c=d and d:FindFirstChildOfClass"Humanoid"if c then c.UseJumpPower=true c.JumpPower=w end end end}e:CreateInput{Name="Teleport to player",Desc="Partial username, Enter to go",PlaceholderText="name",Callback=function(b,e)local c="HumanoidRootPart"if not e or#b==0 then return end local f=string.lower(b)for e,b in ipairs(h:GetPlayers())do if b~=a and string.find(string.lower(b.Name),f,1,true)then local e=b.Character and b.Character:FindFirstChild(c)local f=a.Character and a.Character:FindFirstChild(c)if e and f then f.CFrame=e.CFrame*CFrame.new(0,0,3)d:Notify{Title="Teleported",Content="To "..b.Name,Duration=2,Type="Success"}end return end end d:Notify{Title="Not found",Content="No player matches "..b,Duration=2,Type="Warning"}end}e:CreateSection"Keybinds"e:CreateKeybind{Name="Jump",Desc="Forces a jump",CurrentKeybind="G",Callback=function()local b=a.Character local c=b and b:FindFirstChildOfClass"Humanoid"if c then c:ChangeState(Enum.HumanoidStateType.Jumping)end end}e:CreateKeybind{Name="Reset FOV",CurrentKeybind="H",Callback=function()workspace.CurrentCamera.FieldOfView=70 end}local g=k:CreateTab{Name="Visuals",Desc="Lighting and player visuals",Icon="eye"}g:CreateSection"Environment"local q=b.ClockTime local r=b.Brightness g:CreateDropdown{Name="Time of day",Options={"Morning","Noon","Evening","Night"},CurrentOption="Noon",Callback=function(a)local c={Morning=7,Noon=12,Evening=18,Night=0}b.ClockTime=c[a]or q end}local E=g:CreateSlider{Name="Brightness",Range={0,5},Increment=.1,CurrentValue=r,Callback=function(a)b.Brightness=a end}g:CreateToggle{Name="Full bright",Desc="Overrides ambient lighting",Callback=function(a)if a then b.Ambient=Color3.new(1,1,1)b.OutdoorAmbient=Color3.new(1,1,1)else b.Ambient=Color3.fromRGB(70,70,70)b.OutdoorAmbient=Color3.fromRGB(70,70,70)end end}g:CreateSection"Colors"local x=b.Ambient g:CreateColorPicker{Name="Ambient color",Desc="Lighting.Ambient",Color=x,Callback=function(a)b.Ambient=a end}local o,s=Color3.fromRGB(235,199,246),false local p={}local function y()for a,b in pairs(p)do b:Destroy()p[a]=nil end if not s then return end for c,b in ipairs(h:GetPlayers())do if b~=a and b.Character then local a=Instance.new"Highlight"a.FillColor=o a.OutlineColor=o a.FillTransparency=.6 a.Adornee=b.Character a.Parent=b.Character p[b]=a end end end g:CreateToggle{Name="Player highlight",Desc="Highlight instance on every other character",Callback=function(a)s=a y()end}g:CreateColorPicker{Name="Highlight color",Color=o,Callback=function(a)o=a for c,b in pairs(p)do b.FillColor=a b.OutlineColor=a end end}g:CreateSection"Players"local F={}g:CreateDropdown{Name="ESP parts",Desc="Multi select",Options={"Head","Torso","Arms","Legs"},MultipleOptions=true,CurrentOption={"Head"},Callback=function(a)F=a print("ESP parts:",table.concat(a,", "))end}g:CreateButton{Name="Reset lighting",Callback=function()b.ClockTime=q E:Set(r)end}local f=k:CreateTab{Name="Camera",Desc="View and post-processing",Icon="camera"}f:CreateSection"View"local z=a.CameraMaxZoomDistance f:CreateSlider{Name="Max zoom distance",Range={10,500},Increment=10,CurrentValue=math.clamp(z,10,500),Callback=function(b)a.CameraMaxZoomDistance=b end}f:CreateDropdown{Name="Camera mode",Options={"Classic","Follow","Orbital","Track","Attach","Watch","Fixed","Scriptable"},CurrentOption="Classic",Callback=function(a)local b={Classic=Enum.CameraType.Custom,Follow=Enum.CameraType.Follow,Orbital=Enum.CameraType.Orbital,Track=Enum.CameraType.Track,Attach=Enum.CameraType.Attach,Watch=Enum.CameraType.Watch,Fixed=Enum.CameraType.Fixed,Scriptable=Enum.CameraType.Scriptable}workspace.CurrentCamera.CameraType=b[a]or Enum.CameraType.Custom end}local G=false f:CreateToggle{Name="Force shift lock",Desc="Locks the cursor to the centre",Callback=function(a)G=a u.MouseBehavior=a and Enum.MouseBehavior.LockCenter or Enum.MouseBehavior.Default end}f:CreateSection"Effects"local j=Instance.new"BlurEffect"j.Size=0 j.Enabled=false j.Parent=b f:CreateToggle{Name="Blur",Callback=function(a)j.Enabled=a end}f:CreateSlider{Name="Blur size",Range={0,56},Increment=1,CurrentValue=12,Callback=function(a)j.Size=a end}local l=Instance.new"ColorCorrectionEffect"l.Enabled=false l.Parent=b f:CreateToggle{Name="Color correction",Callback=function(a)l.Enabled=a end}f:CreateSlider{Name="Saturation",Range={-1,1},Increment=.05,CurrentValue=0,Callback=function(a)l.Saturation=a end}f:CreateSlider{Name="Contrast",Range={-1,1},Increment=.05,CurrentValue=0,Callback=function(a)l.Contrast=a end}f:CreateColorPicker{Name="Tint",Color=Color3.new(1,1,1),Callback=function(a)l.TintColor=a end}f:CreateKeybind{Name="Toggle blur",CurrentKeybind="B",Callback=function()j.Enabled=not j.Enabled end}local i=k:CreateTab{Name="Server",Desc="Session info and players",Icon="server"}i:CreateSection"Info"local A=i:CreateLabel{Text="Players: "..#h:GetPlayers()}h.PlayerAdded:Connect(function()A:Set("Players: "..#h:GetPlayers())end)h.PlayerRemoving:Connect(function()A:Set("Players: "..#h:GetPlayers()-1)end)i:CreateParagraph{Title="Place",Content=string.format("PlaceId %d, JobId %s",game.PlaceId,game.JobId~=""and game.JobId or"n/a")}i:CreateSection"Players"local function B()local b={}for d,c in ipairs(h:GetPlayers())do if c~=a then table.insert(b,c.Name)end end return b end local C local D=i:CreateDropdown{Name="Spectate",Desc="Camera follows the selected player",Options=B(),Callback=function(b)C=b local c=b and h:FindFirstChild(b)local d=c and c.Character and c.Character:FindFirstChildOfClass"Humanoid"workspace.CurrentCamera.CameraSubject=d or a.Character and a.Character:FindFirstChildOfClass"Humanoid"end}i:CreateButton{Name="Refresh player list",Callback=function()D:Refresh(B(),true)end}i:CreateButton{Name="Stop spectating",Callback=function()C=nil D:Set(nil,true)local b=a.Character and a.Character:FindFirstChildOfClass"Humanoid"workspace.CurrentCamera.CameraSubject=b end}i:CreateSection"Actions"i:CreateButton{Name="Rejoin",Desc="Teleports back into this place",Icon="refresh-cw",Style="Primary",Callback=function()game:GetService"TeleportService":Teleport(game.PlaceId,a)end}i:CreateInput{Name="Copy to clipboard",Desc="Enter to copy (requires setclipboard)",PlaceholderText="text",Callback=function(a,b)if b and typeof(setclipboard)=="function"then setclipboard(a)d:Notify{Title="Copied",Content=a,Duration=2,Type="Success"}end end}local c=k:CreateTab{Name="Settings",Desc="Interface and configs",Icon="settings"}c:CreateSection"Window"c:CreateKeybind{Name="Toggle UI",CurrentKeybind=t,OnChanged=function(a)k:SetKeybind(a)end}c:CreateInput{Name="Config name",Icon="key-round",PlaceholderText="default",Callback=function(a,b)if b and#a>0 then d:Notify{Title="Config",Content="Saved as "..a,Duration=3,Type="Success"}end end}c:CreateInput{Name="Refresh rate",Desc="Numeric only",PlaceholderText="60",Numeric=true,Callback=function(a)print("Refresh rate:",tonumber(a))end}c:CreateSection"Appearance"local H=c:CreateColorPicker{Name="Accent preview",Desc="Drives the notification stripe colour below",Color=Color3.fromRGB(235,199,246)}c:CreateButton{Name="Preview accent",Callback=function()d:Notify{Title="Accent",Content="Current pick: "..tostring(H:Get()),Duration=3}end}c:CreateKeybind{Name="Quick notify",CurrentKeybind="N",Callback=function()d:Notify{Title="Ping",Content=os.date"%H:%M:%S",Duration=2}end}c:CreateSection"Links"c:CreateButton{Name="Discord",Desc="dsc.gg/airflowscript",Icon="message-circle",Callback=function()if typeof(setclipboard)=="function"then setclipboard"https://dsc.gg/airflowscript"d:Notify{Title="Copied",Content="Invite link copied",Duration=2,Type="Success"}end end}c:CreateButton{Name="Website",Desc="airflowscript.com",Icon="globe",Callback=function()if typeof(setclipboard)=="function"then setclipboard"https://airflowscript.com"d:Notify{Title="Copied",Content="Website link copied",Duration=2,Type="Success"}end end}c:CreateDivider()c:CreateParagraph{Title="About",Content="Airflow UI example. Every element in this window returns a handle: call :Set(value) to drive it from code, :Get() to read it. Callbacks run inside pcall so a failing callback never breaks the interface."}c:CreateLabel{Text="Press RCtrl to hide or show the window."}c:CreateButton{Name="Unload",Desc="Destroys the interface and restores lighting",Callback=function()b.ClockTime=q b.Brightness=r b.Ambient=x m=false n()s=false y()a.CameraMaxZoomDistance=z workspace.CurrentCamera.CameraType=Enum.CameraType.Custom u.MouseBehavior=Enum.MouseBehavior.Default j:Destroy()l:Destroy()k:Destroy()end}d:Notify{Title="Airflow loaded",Content="5 tabs loaded. RCtrl toggles the window.",Duration=5}
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+local Airflow = loadstring(game:HttpGet("https://raw.githubusercontent.com/PookiePepelsss/Airflow-UI/refs/heads/main/Source.luau"))()
+Airflow:PreloadIcons()
+
+local win = Airflow:CreateWindow({
+    Name = "Airflow",
+    LoadingSubtitle = "Example build",
+    ToggleUIKeybind = "RightControl",
+    Size = UDim2.fromOffset(640, 420),
+    ConfigurationSaving = { Enabled = true, FolderName = "AirflowExample", FileName = "default" },
+})
+
+local main = win:CreateTab({ Name = "Main", Desc = "Movement, inputs and keybinds", Icon = "zap" })
+
+main:CreateSection("Movement")
+
+local walkSpeed = 16
+local speedEnabled = false
+
+local function applySpeed()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = speedEnabled and walkSpeed or 16
+    end
+end
+
+main:CreateToggle({
+    Name = "Speed boost",
+    Flag = "SpeedBoost",
+    Desc = "Applies the slider value to WalkSpeed",
+    CurrentValue = false,
+    Callback = function(on)
+        speedEnabled = on
+        applySpeed()
+    end,
+})
+
+main:CreateSlider({
+    Name = "Walk speed",
+    Flag = "WalkSpeed",
+    Range = { 16, 120 },
+    Increment = 1,
+    CurrentValue = 16,
+    Suffix = " st/s",
+    Callback = function(value)
+        walkSpeed = value
+        applySpeed()
+    end,
+})
+
+main:CreateSlider({
+    Name = "Field of view",
+    Flag = "Fov",
+    Range = { 50, 120 },
+    Increment = 0.5,
+    CurrentValue = 70,
+    Callback = function(value)
+        workspace.CurrentCamera.FieldOfView = value
+    end,
+})
+
+main:CreateSection("Actions")
+
+main:CreateButton({
+    Name = "Reset character",
+    Desc = "Respawns you at the last spawn point",
+    Callback = function()
+        local character = LocalPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.Health = 0
+        end
+    end,
+})
+
+main:CreateButton({
+    Name = "Send test notification",
+    Style = "Primary",
+    Callback = function()
+        Airflow:Notify({
+            Title = "Hello",
+            Content = "This toast dismisses on its own or on click.",
+            Duration = 4,
+            Type = "Success",
+        })
+    end,
+})
+
+main:CreateKeybind({
+    Name = "Speed toggle key",
+    Flag = "SpeedKey",
+    Desc = "Press to flip the speed boost",
+    CurrentKeybind = "F",
+    Callback = function()
+        speedEnabled = not speedEnabled
+        applySpeed()
+        Airflow:Notify({ Title = "Speed boost", Content = speedEnabled and "Enabled" or "Disabled", Duration = 2 })
+    end,
+    OnChanged = function(key)
+        Airflow:Notify({ Title = "Rebound", Content = "Speed toggle is now " .. key.Name, Duration = 2, Type = "Info" })
+    end,
+})
+
+main:CreateSection("Inputs")
+
+local jumpPower = 50
+main:CreateInput({
+    Name = "Jump power",
+    Desc = "Applied on Enter",
+    PlaceholderText = "50",
+    Numeric = true,
+    Callback = function(text, enterPressed)
+        local number = tonumber(text)
+        if enterPressed and number then
+            jumpPower = math.clamp(number, 0, 500)
+            local character = LocalPlayer.Character
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.UseJumpPower = true
+                humanoid.JumpPower = jumpPower
+            end
+        end
+    end,
+})
+
+main:CreateInput({
+    Name = "Teleport to player",
+    Desc = "Partial username, Enter to go",
+    PlaceholderText = "name",
+    Callback = function(text, enterPressed)
+        if not enterPressed or #text == 0 then
+            return
+        end
+        local needle = string.lower(text)
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and string.find(string.lower(player.Name), needle, 1, true) then
+                local targetRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if targetRoot and myRoot then
+                    myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 3)
+                    Airflow:Notify({ Title = "Teleported", Content = "To " .. player.Name, Duration = 2, Type = "Success" })
+                end
+                return
+            end
+        end
+        Airflow:Notify({ Title = "Not found", Content = "No player matches " .. text, Duration = 2, Type = "Warning" })
+    end,
+})
+
+main:CreateSection("Keybinds")
+
+main:CreateKeybind({
+    Name = "Jump",
+    Desc = "Forces a jump",
+    CurrentKeybind = "G",
+    Callback = function()
+        local character = LocalPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end,
+})
+
+main:CreateKeybind({
+    Name = "Reset FOV",
+    CurrentKeybind = "H",
+    Callback = function()
+        workspace.CurrentCamera.FieldOfView = 70
+    end,
+})
+
+local visuals = win:CreateTab({ Name = "Visuals", Desc = "Lighting and player visuals", Icon = "eye" })
+
+visuals:CreateSection("Environment")
+
+local originalClockTime = Lighting.ClockTime
+local originalBrightness = Lighting.Brightness
+
+visuals:CreateDropdown({
+    Name = "Time of day",
+    Flag = "TimeOfDay",
+    Options = { "Morning", "Noon", "Evening", "Night" },
+    CurrentOption = "Noon",
+    Callback = function(choice)
+        local times = { Morning = 7, Noon = 12, Evening = 18, Night = 0 }
+        Lighting.ClockTime = times[choice] or originalClockTime
+    end,
+})
+
+local brightnessSlider = visuals:CreateSlider({
+    Name = "Brightness",
+    Range = { 0, 5 },
+    Increment = 0.1,
+    CurrentValue = originalBrightness,
+    Callback = function(value)
+        Lighting.Brightness = value
+    end,
+})
+
+visuals:CreateToggle({
+    Name = "Full bright",
+    Flag = "FullBright",
+    Desc = "Overrides ambient lighting",
+    Callback = function(on)
+        if on then
+            Lighting.Ambient = Color3.new(1, 1, 1)
+            Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+        else
+            Lighting.Ambient = Color3.fromRGB(70, 70, 70)
+            Lighting.OutdoorAmbient = Color3.fromRGB(70, 70, 70)
+        end
+    end,
+})
+
+visuals:CreateSection("Colors")
+
+local originalAmbient = Lighting.Ambient
+visuals:CreateColorPicker({
+    Name = "Ambient color",
+    Desc = "Lighting.Ambient",
+    Color = originalAmbient,
+    Callback = function(color)
+        Lighting.Ambient = color
+    end,
+})
+
+local highlightColor = Color3.fromRGB(235, 199, 246)
+local highlightEnabled = false
+local highlights = {}
+
+local function refreshHighlights()
+    for player, highlight in pairs(highlights) do
+        highlight:Destroy()
+        highlights[player] = nil
+    end
+    if not highlightEnabled then
+        return
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local highlight = Instance.new("Highlight")
+            highlight.FillColor = highlightColor
+            highlight.OutlineColor = highlightColor
+            highlight.FillTransparency = 0.6
+            highlight.Adornee = player.Character
+            highlight.Parent = player.Character
+            highlights[player] = highlight
+        end
+    end
+end
+
+visuals:CreateToggle({
+    Name = "Player highlight",
+    Flag = "Highlight",
+    Desc = "Highlight instance on every other character",
+    Callback = function(on)
+        highlightEnabled = on
+        refreshHighlights()
+    end,
+})
+
+visuals:CreateColorPicker({
+    Name = "Highlight color",
+    Flag = "HighlightColor",
+    Color = highlightColor,
+    Callback = function(color)
+        highlightColor = color
+        for _, highlight in pairs(highlights) do
+            highlight.FillColor = color
+            highlight.OutlineColor = color
+        end
+    end,
+})
+
+visuals:CreateSection("Players")
+
+local espTargets = {}
+visuals:CreateDropdown({
+    Name = "ESP parts",
+    Flag = "EspParts",
+    Desc = "Multi select",
+    Options = { "Head", "Torso", "Arms", "Legs" },
+    MultipleOptions = true,
+    CurrentOption = { "Head" },
+    Callback = function(list)
+        espTargets = list
+        print("ESP parts:", table.concat(list, ", "))
+    end,
+})
+
+visuals:CreateButton({
+    Name = "Reset lighting",
+    Callback = function()
+        Lighting.ClockTime = originalClockTime
+        brightnessSlider:Set(originalBrightness)
+    end,
+})
+
+local camera = win:CreateTab({ Name = "Camera", Desc = "View and post-processing", Icon = "camera" })
+
+camera:CreateSection("View")
+
+local originalMaxZoom = LocalPlayer.CameraMaxZoomDistance
+camera:CreateSlider({
+    Name = "Max zoom distance",
+    Range = { 10, 500 },
+    Increment = 10,
+    CurrentValue = math.clamp(originalMaxZoom, 10, 500),
+    Callback = function(value)
+        LocalPlayer.CameraMaxZoomDistance = value
+    end,
+})
+
+camera:CreateDropdown({
+    Name = "Camera mode",
+    Flag = "CameraMode",
+    Options = { "Classic", "Follow", "Orbital", "Track", "Attach", "Watch", "Fixed", "Scriptable" },
+    CurrentOption = "Classic",
+    Callback = function(choice)
+        local modes = {
+            Classic = Enum.CameraType.Custom,
+            Follow = Enum.CameraType.Follow,
+            Orbital = Enum.CameraType.Orbital,
+            Track = Enum.CameraType.Track,
+            Attach = Enum.CameraType.Attach,
+            Watch = Enum.CameraType.Watch,
+            Fixed = Enum.CameraType.Fixed,
+            Scriptable = Enum.CameraType.Scriptable,
+        }
+        workspace.CurrentCamera.CameraType = modes[choice] or Enum.CameraType.Custom
+    end,
+})
+
+local shiftLock = false
+camera:CreateToggle({
+    Name = "Force shift lock",
+    Desc = "Locks the cursor to the centre",
+    Callback = function(on)
+        shiftLock = on
+        UserInputService.MouseBehavior = on and Enum.MouseBehavior.LockCenter or Enum.MouseBehavior.Default
+    end,
+})
+
+camera:CreateSection("Effects")
+
+local blur = Instance.new("BlurEffect")
+blur.Size = 0
+blur.Enabled = false
+blur.Parent = Lighting
+
+camera:CreateToggle({
+    Name = "Blur",
+    Callback = function(on)
+        blur.Enabled = on
+    end,
+})
+
+camera:CreateSlider({
+    Name = "Blur size",
+    Flag = "BlurSize",
+    Range = { 0, 56 },
+    Increment = 1,
+    CurrentValue = 12,
+    Callback = function(value)
+        blur.Size = value
+    end,
+})
+
+local colorCorrection = Instance.new("ColorCorrectionEffect")
+colorCorrection.Enabled = false
+colorCorrection.Parent = Lighting
+
+camera:CreateToggle({
+    Name = "Color correction",
+    Callback = function(on)
+        colorCorrection.Enabled = on
+    end,
+})
+
+camera:CreateSlider({
+    Name = "Saturation",
+    Range = { -1, 1 },
+    Increment = 0.05,
+    CurrentValue = 0,
+    Callback = function(value)
+        colorCorrection.Saturation = value
+    end,
+})
+
+camera:CreateSlider({
+    Name = "Contrast",
+    Range = { -1, 1 },
+    Increment = 0.05,
+    CurrentValue = 0,
+    Callback = function(value)
+        colorCorrection.Contrast = value
+    end,
+})
+
+camera:CreateColorPicker({
+    Name = "Tint",
+    Color = Color3.new(1, 1, 1),
+    Callback = function(color)
+        colorCorrection.TintColor = color
+    end,
+})
+
+camera:CreateKeybind({
+    Name = "Toggle blur",
+    CurrentKeybind = "B",
+    Callback = function()
+        blur.Enabled = not blur.Enabled
+    end,
+})
+
+local server = win:CreateTab({ Name = "Server", Desc = "Session info and players", Icon = "server" })
+
+server:CreateSection("Info")
+
+local playerCountLabel = server:CreateLabel({ Text = "Players: " .. #Players:GetPlayers() })
+Players.PlayerAdded:Connect(function()
+    playerCountLabel:Set("Players: " .. #Players:GetPlayers())
+end)
+Players.PlayerRemoving:Connect(function()
+    playerCountLabel:Set("Players: " .. (#Players:GetPlayers() - 1))
+end)
+
+server:CreateParagraph({
+    Title = "Place",
+    Content = string.format("PlaceId %d, JobId %s", game.PlaceId, game.JobId ~= "" and game.JobId or "n/a"),
+})
+
+server:CreateSection("Players")
+
+local function playerNames()
+    local names = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(names, player.Name)
+        end
+    end
+    return names
+end
+
+local spectating = nil
+local playerDropdown = server:CreateDropdown({
+    Name = "Spectate",
+    Desc = "Camera follows the selected player",
+    Options = playerNames(),
+    Callback = function(name)
+        spectating = name
+        local player = name and Players:FindFirstChild(name)
+        local humanoid = player and player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        workspace.CurrentCamera.CameraSubject = humanoid or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid"))
+    end,
+})
+
+server:CreateButton({
+    Name = "Refresh player list",
+    Callback = function()
+        playerDropdown:Refresh(playerNames(), true)
+    end,
+})
+
+server:CreateButton({
+    Name = "Stop spectating",
+    Callback = function()
+        spectating = nil
+        playerDropdown:Set(nil, true)
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        workspace.CurrentCamera.CameraSubject = humanoid
+    end,
+})
+
+server:CreateSection("Actions")
+
+server:CreateButton({
+    Name = "Rejoin",
+    Desc = "Teleports back into this place",
+    Icon = "refresh-cw",
+    Style = "Primary",
+    Callback = function()
+        game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
+    end,
+})
+
+server:CreateInput({
+    Name = "Copy to clipboard",
+    Desc = "Enter to copy (requires setclipboard)",
+    PlaceholderText = "text",
+    Callback = function(text, enterPressed)
+        if enterPressed and typeof(setclipboard) == "function" then
+            setclipboard(text)
+            Airflow:Notify({ Title = "Copied", Content = text, Duration = 2, Type = "Success" })
+        end
+    end,
+})
+
+local settings = win:CreateTab({ Name = "Settings", Desc = "Interface and configs", Icon = "settings" })
+
+settings:CreateSection("Window")
+
+settings:CreateKeybind({
+    Name = "Toggle UI",
+    CurrentKeybind = "RightControl",
+    OnChanged = function(key)
+        win:SetKeybind(key)
+    end,
+})
+
+settings:CreateInput({
+    Name = "Config name",
+    Icon = "key-round",
+    PlaceholderText = "default",
+    Callback = function(text, enterPressed)
+        if enterPressed and #text > 0 then
+            Airflow:Notify({ Title = "Config", Content = "Saved as " .. text, Duration = 3, Type = "Success" })
+        end
+    end,
+})
+
+settings:CreateInput({
+    Name = "Refresh rate",
+    Desc = "Numeric only",
+    PlaceholderText = "60",
+    Numeric = true,
+    Callback = function(text)
+        print("Refresh rate:", tonumber(text))
+    end,
+})
+
+settings:CreateSection("Appearance")
+
+local accentDemo = settings:CreateColorPicker({
+    Name = "Accent preview",
+    Desc = "Drives the notification stripe colour below",
+    Color = Color3.fromRGB(235, 199, 246),
+})
+
+settings:CreateButton({
+    Name = "Preview accent",
+    Callback = function()
+        Airflow:Notify({ Title = "Accent", Content = "Current pick: " .. tostring(accentDemo:Get()), Duration = 3 })
+    end,
+})
+
+settings:CreateKeybind({
+    Name = "Quick notify",
+    CurrentKeybind = "N",
+    Callback = function()
+        Airflow:Notify({ Title = "Ping", Content = os.date("%H:%M:%S"), Duration = 2 })
+    end,
+})
+
+settings:CreateConfigManager({ Name = "Configs" })
+
+settings:CreateSection("Links")
+
+settings:CreateButton({
+    Name = "Discord",
+    Desc = "dsc.gg/airflowscript",
+    Icon = "message-circle",
+    Callback = function()
+        if typeof(setclipboard) == "function" then
+            setclipboard("https://dsc.gg/airflowscript")
+            Airflow:Notify({ Title = "Copied", Content = "Invite link copied", Duration = 2, Type = "Success" })
+        end
+    end,
+})
+
+settings:CreateButton({
+    Name = "Website",
+    Desc = "airflowscript.com",
+    Icon = "globe",
+    Callback = function()
+        if typeof(setclipboard) == "function" then
+            setclipboard("https://airflowscript.com")
+            Airflow:Notify({ Title = "Copied", Content = "Website link copied", Duration = 2, Type = "Success" })
+        end
+    end,
+})
+
+settings:CreateDivider()
+
+settings:CreateParagraph({
+    Title = "About",
+    Content = "Airflow UI example. Every element in this window returns a handle: call :Set(value) to drive it from code, :Get() to read it. Callbacks run inside pcall so a failing callback never breaks the interface.",
+})
+
+settings:CreateLabel({ Text = "Press RCtrl to hide or show the window." })
+
+settings:CreateButton({
+    Name = "Unload",
+    Desc = "Destroys the interface and restores lighting",
+    Callback = function()
+        Lighting.ClockTime = originalClockTime
+        Lighting.Brightness = originalBrightness
+        Lighting.Ambient = originalAmbient
+        speedEnabled = false
+        applySpeed()
+        highlightEnabled = false
+        refreshHighlights()
+        LocalPlayer.CameraMaxZoomDistance = originalMaxZoom
+        workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        blur:Destroy()
+        colorCorrection:Destroy()
+        win:Destroy()
+    end,
+})
+
+win:LoadConfig()
+
+Airflow:Notify({
+    Title = "Airflow loaded",
+    Content = "5 tabs loaded. RCtrl toggles the window.",
+    Duration = 5,
+})
