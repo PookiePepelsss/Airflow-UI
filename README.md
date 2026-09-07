@@ -22,6 +22,7 @@ local Window = Airflow:CreateWindow({
     OpenButton = nil, -- true / false / { Title, Icon }; defaults to on for touch-only devices
     Loading = { Title = "Airflow", Steps = { "Preparing", "Loading icons", "Ready" }, Duration = 1.6 }, -- or false
     ConfigurationSaving = { Enabled = true, FolderName = "MyHub", FileName = "default" },
+    Parent = nil, -- defaults to gethui() / CoreGui, falling back to PlayerGui
 })
 
 Window:Toggle()
