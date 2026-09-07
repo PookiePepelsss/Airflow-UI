@@ -29,8 +29,6 @@ local Airflow = loadstring(game:HttpGet("https://raw.githubusercontent.com/Pooki
 - [Flags](#flags)
 - [Icons](#icons)
 - [Theme, fonts and assets](#theme-fonts-and-assets)
-- [Behaviour reference](#behaviour-reference)
-- [Full example](#full-example)
 
 ## Quick start
 
@@ -540,23 +538,6 @@ Airflow.Fonts.Bold = Font.new(family, Enum.FontWeight.SemiBold)
 | `Error` | 240, 120, 120 | Notification title tint |
 
 Fonts default to Builder Sans (`rbxasset://fonts/families/BuilderSans.json`) at Regular, Medium and SemiBold. Assets: `Shadow` (sliced drop shadow), `Glow` (radial glow used behind icons and as ambient decals), `Logo`.
-
-## Behaviour reference
-
-- **Hide / show** - the `ToggleUIKeybind` key flips the window unless a text box has focus. The `×` button hides it. Hidden windows keep their state.
-- **Drag** - hold left click (or touch) on any empty area of the window; it follows the pointer with a short ease and stops in place on release. Element cards, tab buttons, the close button and text boxes never start a drag.
-- **Tabs** - the accent indicator slides between tab buttons; pages crossfade with a short vertical slide. Labels nudge right on hover.
-- **Hover** - cards brighten their outline only. Primary buttons brighten their fill.
-- **Callbacks** - every callback runs inside `pcall`; errors are printed with `warn("[AirflowUI] callback error: ...")` and never break the interface.
-- **Pointer math** - the library converts `GetMouseLocation` into inset-adjusted GUI space, so sliders, the colour picker and drag stay accurate whether or not the host honours `IgnoreGuiInset`.
-- **Cleanup** - `Window:Destroy()` disconnects every `UserInputService` and `RunService` connection the window or its elements created.
-
-## Full example
-
-`Example.luau` is a standalone script built on the loadstring above. It creates five tabs and uses every element:
-
-- **Main** - speed toggle and slider, FOV slider, reset button, primary notify button, jump-power and teleport inputs, Jump / Reset FOV keybinds
-- **Visuals** - time-of-day dropdown, brightness slider, full bright toggle, ambient colour picker, player highlight toggle and colour, multi-select ESP dropdown
 - **Camera** - max zoom slider, camera-mode dropdown (with search), shift lock toggle, blur and colour-correction effects with sliders, tint picker, blur keybind
 - **Server** - live player count label, place/job paragraph, spectate dropdown with refresh, rejoin, clipboard input
 - **Settings** - UI keybind, config inputs, accent preview picker, quick-notify keybind, Discord / Website buttons, about paragraph, unload button that restores everything it changed
