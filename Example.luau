@@ -1502,7 +1502,8 @@ function Tab:Keybind(opts)
             return
         end
         if self_.Listening then
-            self.Window._consumedInput = input
+            self.Window._consumedKey = input.KeyCode
+            self.Window._consumedAt = os.clock()
             if input.KeyCode == Enum.KeyCode.Escape then
                 self_.Listening = false
                 render()
@@ -2383,7 +2384,9 @@ function Library:Window(opts)
         end
         if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == self.Keybind then
             task.defer(function()
-                if self._consumedInput ~= input and not self._destroyed then
+                local consumed = self._consumedKey == input.KeyCode and os.clock() - (self._consumedAt or 0) < 0.2
+                self._consumedKey = nil
+                if not consumed and not self._destroyed then
                     self:Toggle(not self.Open)
                 end
             end)
@@ -3753,7 +3756,6 @@ function Window:Destroy()
 end
 
 local Players = game:GetService("Players")
-local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
@@ -3761,394 +3763,225 @@ local Airflow = Library
 
 local Window = Airflow:CreateWindow({
     Name = "Airflow",
-    LoadingSubtitle = "Showcase",
-    LoadingSteps = { "Preparing interface", "Loading icons", "Reading config" },
+    LoadingSubtitle = "Example",
     ToggleUIKeybind = "RightControl", -- key that hides and shows the window
     -- examples: "RightShift", "RightControl", "LeftAlt", "Insert", "Home", "F1", "Backquote"
     -- Enum.KeyCode values also work: ToggleUIKeybind = Enum.KeyCode.RightShift
-    ConfigurationSaving = { Enabled = true, FolderName = "AirflowShowcase", FileName = "default" },
+    ConfigurationSaving = { Enabled = true, FolderName = "AirflowExample", FileName = "default" },
 })
 
-local function humanoid()
-    local character = LocalPlayer.Character
-    return character and character:FindFirstChildOfClass("Humanoid")
-end
+local Elements = Window:CreateTab({ Name = "Elements", Desc = "One of everything", Icon = "layout-grid" })
 
-local function root()
-    local character = LocalPlayer.Character
-    return character and character:FindFirstChild("HumanoidRootPart")
-end
+Elements:CreateSection("Example section")
 
-local Player = Window:CreateTab({ Name = "Player", Desc = "Movement and character", Icon = "user" })
-
-Player:CreateSection("Movement")
-
-local speedEnabled = false
-local walkSpeed = 16
-local jumpPower = 50
-
-local function applyMovement()
-    local hum = humanoid()
-    if not hum then
-        return
-    end
-    hum.WalkSpeed = speedEnabled and walkSpeed or 16
-    hum.UseJumpPower = true
-    hum.JumpPower = speedEnabled and jumpPower or 50
-end
-
-Player:CreateToggle({
-    Name = "Movement overrides",
-    Desc = "Applies the two sliders below",
-    Flag = "MovementEnabled",
-    Callback = function(on)
-        speedEnabled = on
-        applyMovement()
+Elements:CreateButton({
+    Name = "Example button",
+    Desc = "Example description",
+    Icon = "mouse-pointer-click",
+    Callback = function()
+        print("button")
     end,
 })
 
-Player:CreateSlider({
-    Name = "Walk speed",
-    Range = { 16, 150 },
-    Increment = 1,
-    Suffix = " sps",
-    CurrentValue = 16,
-    Flag = "WalkSpeed",
-    Callback = function(value)
-        walkSpeed = value
-        applyMovement()
+Elements:CreateButton({
+    Name = "Example primary button",
+    Style = "Primary",
+    Callback = function()
+        print("primary button")
     end,
 })
 
-Player:CreateSlider({
-    Name = "Jump power",
-    Range = { 50, 250 },
-    Increment = 5,
-    CurrentValue = 50,
-    Flag = "JumpPower",
-    Callback = function(value)
-        jumpPower = value
-        applyMovement()
+Elements:CreateToggle({
+    Name = "Example toggle",
+    Desc = "Example description",
+    CurrentValue = false,
+    Flag = "ExampleToggle",
+    Callback = function(Value)
+        print("toggle", Value)
     end,
 })
 
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    applyMovement()
-end)
-
-Player:CreateStepper({
-    Name = "Fall damage threshold",
+Elements:CreateSlider({
+    Name = "Example slider",
     Range = { 0, 100 },
-    Increment = 5,
-    Suffix = " studs",
-    CurrentValue = 50,
-    Flag = "FallThreshold",
-    Callback = function(value)
-        print("fall threshold", value)
-    end,
-})
-
-local health = Player:CreateProgress({
-    Name = "Health",
-    Desc = "Live from the humanoid",
-    CurrentValue = 1,
-})
-RunService.Heartbeat:Connect(function()
-    local hum = humanoid()
-    if hum and hum.MaxHealth > 0 then
-        health:Set(hum.Health / hum.MaxHealth, true)
-    end
-end)
-
-Player:CreateSection("Character")
-
-Player:CreateButton({
-    Name = "Respawn",
-    Desc = "Sets health to zero",
-    Icon = "refresh-cw",
-    Callback = function()
-        local hum = humanoid()
-        if hum then
-            hum.Health = 0
-        end
-    end,
-})
-
-Player:CreateInput({
-    Name = "Teleport to",
-    Desc = "Partial name, Enter to go",
-    Icon = "map-pin",
-    PlaceholderText = "player",
-    Callback = function(text, enter)
-        if not enter or #text == 0 then
-            return
-        end
-        local needle = text:lower()
-        for _, other in ipairs(Players:GetPlayers()) do
-            if other ~= LocalPlayer and other.Name:lower():find(needle, 1, true) then
-                local target = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
-                local mine = root()
-                if target and mine then
-                    mine.CFrame = target.CFrame * CFrame.new(0, 0, 3)
-                    Airflow:Notify({ Title = "Teleported", Content = other.Name, Icon = "map-pin", Type = "Success", Duration = 2 })
-                end
-                return
-            end
-        end
-        Airflow:Notify({ Title = "No match", Content = text, Type = "Warning", Duration = 2 })
-    end,
-})
-
-Player:CreateKeybind({
-    Name = "Toggle overrides",
-    CurrentKeybind = "F",
-    Flag = "MovementKey",
-    Callback = function()
-        Airflow.Flags.MovementEnabled:Set(not Airflow.Flags.MovementEnabled:Get())
-    end,
-})
-
-local Visuals = Window:CreateTab({ Name = "Visuals", Desc = "Lighting, camera and highlights", Icon = "eye" })
-
-Visuals:CreateSection("Lighting")
-
-local saved = {
-    ClockTime = Lighting.ClockTime,
-    Brightness = Lighting.Brightness,
-    Ambient = Lighting.Ambient,
-    OutdoorAmbient = Lighting.OutdoorAmbient,
-    Fov = workspace.CurrentCamera.FieldOfView,
-}
-
-Visuals:CreateDropdown({
-    Name = "Time of day",
-    Options = { "Dawn", "Morning", "Noon", "Evening", "Night" },
-    CurrentOption = "Noon",
-    Flag = "TimeOfDay",
-    Callback = function(choice)
-        local hours = { Dawn = 5.5, Morning = 8, Noon = 12, Evening = 18, Night = 0 }
-        Lighting.ClockTime = hours[choice] or saved.ClockTime
-    end,
-})
-
-Visuals:CreateSlider({
-    Name = "Brightness",
-    Range = { 0, 5 },
-    Increment = 0.1,
-    CurrentValue = saved.Brightness,
-    Flag = "Brightness",
-    Callback = function(value)
-        Lighting.Brightness = value
-    end,
-})
-
-Visuals:CreateColorPicker({
-    Name = "Ambient",
-    Color = saved.Ambient,
-    Flag = "Ambient",
-    Callback = function(color)
-        Lighting.Ambient = color
-        Lighting.OutdoorAmbient = color
-    end,
-})
-
-Visuals:CreateSection("Camera")
-
-Visuals:CreateSlider({
-    Name = "Field of view",
-    Range = { 40, 120 },
     Increment = 1,
-    Suffix = "°",
-    CurrentValue = saved.Fov,
-    Flag = "Fov",
-    Callback = function(value)
-        workspace.CurrentCamera.FieldOfView = value
+    Suffix = "%",
+    CurrentValue = 50,
+    Flag = "ExampleSlider",
+    Callback = function(Value)
+        print("slider", Value)
     end,
 })
 
-Visuals:CreateSection("Players")
-
-local highlightColor = Color3.fromRGB(235, 199, 246)
-local highlightsOn = false
-local highlights = {}
-
-local function clearHighlights()
-    for player, highlight in pairs(highlights) do
-        highlight:Destroy()
-        highlights[player] = nil
-    end
-end
-
-local function highlightPlayer(player)
-    if not highlightsOn or player == LocalPlayer or not player.Character then
-        return
-    end
-    if highlights[player] then
-        highlights[player]:Destroy()
-    end
-    local highlight = Instance.new("Highlight")
-    highlight.FillColor = highlightColor
-    highlight.OutlineColor = highlightColor
-    highlight.FillTransparency = 0.65
-    highlight.Adornee = player.Character
-    highlight.Parent = player.Character
-    highlights[player] = highlight
-end
-
-local function refreshHighlights()
-    clearHighlights()
-    for _, player in ipairs(Players:GetPlayers()) do
-        highlightPlayer(player)
-    end
-end
-
-Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function()
-        task.wait(0.2)
-        highlightPlayer(player)
-    end)
-end)
-
-Visuals:CreateToggle({
-    Name = "Highlight players",
-    Flag = "Highlights",
-    Callback = function(on)
-        highlightsOn = on
-        refreshHighlights()
+Elements:CreateStepper({
+    Name = "Example stepper",
+    Range = { 0, 10 },
+    Increment = 1,
+    CurrentValue = 5,
+    Flag = "ExampleStepper",
+    Callback = function(Value)
+        print("stepper", Value)
     end,
 })
 
-Visuals:CreateColorPicker({
-    Name = "Highlight colour",
-    Color = highlightColor,
-    Flag = "HighlightColor",
-    Callback = function(color)
-        highlightColor = color
-        for _, highlight in pairs(highlights) do
-            highlight.FillColor = color
-            highlight.OutlineColor = color
-        end
+Elements:CreateProgress({
+    Name = "Example progress",
+    CurrentValue = 0.65,
+})
+
+Elements:CreateDropdown({
+    Name = "Example dropdown",
+    Options = { "Option 1", "Option 2", "Option 3" },
+    CurrentOption = "Option 1",
+    Flag = "ExampleDropdown",
+    Callback = function(Option)
+        print("dropdown", Option)
     end,
 })
 
-Visuals:CreateDropdown({
-    Name = "Show on",
-    Options = { "Everyone", "Teammates", "Enemies" },
-    CurrentOption = "Everyone",
-    Flag = "HighlightFilter",
-    Callback = function(choice)
-        print("highlight filter:", choice)
+Elements:CreateDropdown({
+    Name = "Example multi dropdown",
+    Options = { "Option 1", "Option 2", "Option 3", "Option 4" },
+    MultipleOptions = true,
+    CurrentOption = { "Option 1" },
+    Flag = "ExampleMultiDropdown",
+    Callback = function(Options)
+        print("multi dropdown", table.concat(Options, ", "))
     end,
 })
 
-local Info = Window:CreateTab({ Name = "Info", Desc = "Session and performance", Icon = "activity" })
+Elements:CreateInput({
+    Name = "Example input",
+    PlaceholderText = "Type here",
+    Flag = "ExampleInput",
+    Callback = function(Text, EnterPressed)
+        print("input", Text, EnterPressed)
+    end,
+})
+
+Elements:CreateKeybind({
+    Name = "Example keybind",
+    CurrentKeybind = "F",
+    Flag = "ExampleKeybind",
+    Callback = function(Key)
+        print("keybind", Key.Name)
+    end,
+})
+
+Elements:CreateColorPicker({
+    Name = "Example color picker",
+    Color = Color3.fromRGB(235, 199, 246),
+    Flag = "ExampleColor",
+    Callback = function(Color)
+        print("color", Color)
+    end,
+})
+
+Elements:CreateDivider()
+
+Elements:CreateLabel("Example label")
+
+Elements:CreateParagraph({
+    Title = "Example paragraph",
+    Content = "Longer text that wraps across several lines.",
+})
+
+local Popups = Window:CreateTab({ Name = "Popups", Desc = "Notifications and dialogs", Icon = "bell" })
+
+Popups:CreateButton({
+    Name = "Example notification",
+    Callback = function()
+        Airflow:Notify({
+            Title = "Example",
+            Content = "Example notification",
+            Icon = "bell",
+            Type = "Success",
+            Duration = 3,
+        })
+    end,
+})
+
+Popups:CreateButton({
+    Name = "Example confirm",
+    Callback = function()
+        Airflow:Confirm({
+            Title = "Example confirm",
+            Content = "Are you sure?",
+            ConfirmText = "Yes",
+            CancelText = "No",
+            Callback = function()
+                print("confirmed")
+            end,
+        })
+    end,
+})
+
+Popups:CreateButton({
+    Name = "Example dialog",
+    Callback = function()
+        Airflow:Dialog({
+            Title = "Example dialog",
+            Content = "Pick one.",
+            Buttons = {
+                { Title = "One", Callback = function() print("one") end },
+                { Title = "Two", Callback = function() print("two") end },
+                { Title = "Three", Variant = "Primary", Callback = function() print("three") end },
+            },
+        })
+    end,
+})
+
+local Info = Window:CreateTab({ Name = "Info", Desc = "Session", Icon = "activity" })
 
 Info:CreateSection("Session")
 
-local playersLabel = Info:CreateLabel("Players: " .. #Players:GetPlayers())
-local fpsLabel = Info:CreateLabel("FPS: 0")
-local pingLabel = Info:CreateLabel("Ping: 0 ms")
+local PlayersLabel = Info:CreateLabel("Players: " .. #Players:GetPlayers())
+local FpsLabel = Info:CreateLabel("FPS: 0")
+local PingLabel = Info:CreateLabel("Ping: 0 ms")
 
 Players.PlayerAdded:Connect(function()
-    playersLabel:Set("Players: " .. #Players:GetPlayers())
+    PlayersLabel:Set("Players: " .. #Players:GetPlayers())
 end)
 Players.PlayerRemoving:Connect(function()
-    playersLabel:Set("Players: " .. (#Players:GetPlayers() - 1))
+    PlayersLabel:Set("Players: " .. (#Players:GetPlayers() - 1))
 end)
 
-local frames, elapsed = 0, 0
-RunService.RenderStepped:Connect(function(dt)
-    frames += 1
-    elapsed += dt
-    if elapsed >= 1 then
-        fpsLabel:Set("FPS: " .. frames)
-        local ok, ping = pcall(function()
+local Frames, Elapsed = 0, 0
+RunService.RenderStepped:Connect(function(Delta)
+    Frames += 1
+    Elapsed += Delta
+    if Elapsed >= 1 then
+        FpsLabel:Set("FPS: " .. Frames)
+        local Ok, Ping = pcall(function()
             return math.floor(LocalPlayer:GetNetworkPing() * 1000)
         end)
-        pingLabel:Set("Ping: " .. (ok and ping or 0) .. " ms")
-        frames, elapsed = 0, 0
+        PingLabel:Set("Ping: " .. (Ok and Ping or 0) .. " ms")
+        Frames, Elapsed = 0, 0
     end
 end)
 
-Info:CreateParagraph({
-    Title = "Place",
-    Content = ("PlaceId %d\nJobId %s"):format(game.PlaceId, game.JobId ~= "" and game.JobId or "n/a"),
-})
+Window:CreateTab({ Name = "Empty", Desc = "Nothing in here", Icon = "package" })
 
-Info:CreateButton({
-    Name = "Copy job id",
-    Icon = "copy",
-    Callback = function()
-        if typeof(setclipboard) == "function" then
-            setclipboard(game.JobId)
-            Airflow:Notify({ Title = "Copied", Content = "Job id on clipboard", Icon = "check", Type = "Success", Duration = 2 })
-        end
-    end,
-})
-
-Info:CreateButton({
-    Name = "Rejoin",
-    Icon = "log-in",
-    Style = "Primary",
-    Callback = function()
-        game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
-    end,
-})
-
-Window:CreateTab({ Name = "Extra", Desc = "Empty tab placeholder", Icon = "package" })
-
-local Settings = Window:CreateTab({ Name = "Settings", Desc = "Interface", Icon = "settings" })
-
-Settings:CreateSection("Interface")
+local Settings = Window:CreateTab({ Name = "Settings", Icon = "settings" })
 
 Settings:CreateKeybind({
     Name = "Toggle UI",
     CurrentKeybind = "RightControl",
-    OnChanged = function(key)
-        Window:SetKeybind(key)
-    end,
-})
-
-Settings:CreateDropdown({
-    Name = "Notification test",
-    Options = { "Info", "Success", "Warning", "Error" },
-    Callback = function(kind)
-        if kind then
-            Airflow:Notify({ Title = kind, Content = "Sample " .. kind:lower() .. " notification", Icon = "bell", Type = kind, Duration = 3 })
-        end
+    OnChanged = function(Key)
+        Window:SetKeybind(Key)
     end,
 })
 
 Settings:CreateConfigManager({ Name = "Configs" })
 
-Settings:CreateDivider()
-
-Settings:CreateParagraph({
-    Title = "About",
-    Content = "Every element on this hub has a Flag, so the config manager above saves and restores the whole state. Click a slider value to type a number, drag the corner grip to resize, and drag empty space to move.",
-})
-
 Settings:CreateButton({
     Name = "Unload",
-    Desc = "Restores lighting and destroys the interface",
     Icon = "power",
     Callback = function()
         Airflow:Confirm({
-            Title = "Unload Airflow?",
-            Content = "Lighting and movement are restored and the window closes.",
-            Icon = "power",
+            Title = "Unload?",
             ConfirmText = "Unload",
             Callback = function()
-                Lighting.ClockTime = saved.ClockTime
-                Lighting.Brightness = saved.Brightness
-                Lighting.Ambient = saved.Ambient
-                Lighting.OutdoorAmbient = saved.OutdoorAmbient
-                workspace.CurrentCamera.FieldOfView = saved.Fov
-                speedEnabled = false
-                applyMovement()
-                highlightsOn = false
-                clearHighlights()
                 Window:Destroy()
             end,
         })
@@ -4156,11 +3989,3 @@ Settings:CreateButton({
 })
 
 Window:LoadConfig()
-
-Airflow:Notify({
-    Title = "Airflow ready",
-    Content = "5 tabs loaded. RCtrl hides the window.",
-    Icon = "check",
-    Type = "Success",
-    Duration = 4,
-})
