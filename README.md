@@ -6,7 +6,7 @@ A Roblox UI library written in Luau. Windows, tabs and eleven element types with
 local Airflow = loadstring(game:HttpGet("https://raw.githubusercontent.com/PookiePepelsss/Airflow-UI/refs/heads/main/Source.luau"))()
 ```
 
-Every constructor also works without the `Create` prefix, and a bare string can be passed where only a name is needed.
+Every constructor also works without the `Create` prefix, and a bare string can be passed where only a name is needed. On touch-only devices cards, chips, toggles and slider hit areas are automatically larger.
 
 ## Window
 
@@ -120,6 +120,45 @@ local Fov = Tab:CreateSlider({
 
 Fov:Set(90)
 print(Fov:Get())
+```
+
+## Stepper
+
+Hold either button to repeat.
+
+```lua
+local Count = Tab:CreateStepper({
+    Name = "Fall damage threshold",
+    Range = { 0, 100 },
+    Increment = 5,
+    Suffix = " studs",
+    CurrentValue = 50,
+    Flag = "FallThreshold",
+    Callback = function(value)
+        print(value)
+    end,
+})
+
+Count:Set(75)
+print(Count:Get())
+```
+
+## Progress
+
+Read-only bar driven from code, 0 to 1.
+
+```lua
+local Health = Tab:CreateProgress({
+    Name = "Health",
+    Desc = "Live from the humanoid",
+    CurrentValue = 1,
+    Color = Airflow.Theme.Success, -- optional fill colour
+    Format = function(fraction) return math.floor(fraction * 100) .. " hp" end, -- optional, default is a percentage
+})
+
+Health:Set(0.5)      -- animates the fill; Set(value, true) skips the callback
+Health:SetColor(Airflow.Theme.Error)
+print(Health:Get())
 ```
 
 ## Dropdown
