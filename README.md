@@ -18,8 +18,26 @@ Every constructor also works without the `Create` prefix. `Tab:Toggle` is the sa
 local Window = Airflow:CreateWindow({
     Name = "Airflow",
     LoadingSubtitle = "by Pookie",
+    Icon = "wind",
     ToggleUIKeybind = "RightControl",
-    ConfigurationSaving = { Enabled = true, FolderName = "MyHub" },
+    Size = UDim2.fromOffset(640, 420),
+    MinSize = Vector2.new(480, 320),
+    MaxSize = Vector2.new(1000, 700),
+    MaxNotifications = 4,
+    OpenButton = { Title = "Airflow", Icon = "wind" },
+    Loading = {
+        Enabled = true,
+        Title = "Airflow",
+        Text = "Starting",
+        Steps = { "Preparing interface", "Loading icons", "Almost there" },
+        Duration = 1.6,
+    },
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "MyHub",
+        FileName = "default",
+    },
+    Parent = game:GetService("CoreGui"),
 })
 
 Window:Toggle(false)
@@ -75,6 +93,7 @@ local Tab = Window:CreateTab({
     Name = "Main",
     Desc = "Movement and actions",
     Icon = "zap",
+    EmptyText = "Nothing here yet",
 })
 
 local Tab = Window:CreateTab("Main", "zap")
@@ -130,6 +149,11 @@ Tab:CreateDivider()
 > A single muted line.
 
 ```lua
+local Label = Tab:CreateLabel({
+    Text = "Players: 12",
+    Color = Airflow.Theme.Muted,
+})
+
 local Label = Tab:CreateLabel("Players: 12")
 
 Label:Set("Players: 13")
@@ -187,6 +211,7 @@ local Button = Tab:CreateButton({
     Name = "Reset character",
     Desc = "Respawns at the last spawn point",
     Icon = "refresh-cw",
+    Style = "Primary",
     Callback = function()
         print("clicked")
     end,
@@ -220,8 +245,9 @@ Button:SetText("Respawn")
 ```lua
 local Toggle = Tab:CreateToggle({
     Name = "Auto sprint",
-    Flag = "AutoSprint",
+    Desc = "Hold shift to run",
     CurrentValue = true,
+    Flag = "AutoSprint",
     Callback = function(Value)
         print("Auto sprint:", Value)
     end,
@@ -257,6 +283,7 @@ Toggle:Set(false)
 ```lua
 local Slider = Tab:CreateSlider({
     Name = "Walk speed",
+    Desc = "Studs per second",
     Range = { 16, 100 },
     Increment = 1,
     Suffix = " sps",
@@ -302,8 +329,10 @@ Click the value chip to type an exact number.
 ```lua
 local Stepper = Tab:CreateStepper({
     Name = "Fall threshold",
+    Desc = "Distance before damage",
     Range = { 0, 100 },
     Increment = 5,
+    Suffix = " studs",
     CurrentValue = 50,
     Flag = "FallThreshold",
     Callback = function(Value)
@@ -318,11 +347,24 @@ Hold either button to repeat.
 
 ### Properties
 
-Same as [Slider](#slider).
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `Name` | string | `"Stepper"` | The label. |
+| `Desc` | string | — | Hint text under the label. |
+| `Range` | table | `{ 0, 100 }` | `{ min, max }`. |
+| `Increment` | number | `1` | Step per press. Its decimals set how the value is shown. |
+| `Suffix` | string | `""` | Appended to the value. |
+| `CurrentValue` | number | min | The initial value. |
+| `Flag` | string | — | The save key. |
+| `Callback` | function | — | Runs with the new value on every change. |
 
 ### Handle
 
-Same as [Slider](#slider).
+| Member | Description |
+| --- | --- |
+| `.Value` | The current value. |
+| `Set(value, skipCallback?)` | Set the value. Snapped to the increment and clamped to the range. |
+| `Get()` | The current value. |
 
 ---
 
@@ -333,7 +375,15 @@ Same as [Slider](#slider).
 ```lua
 local Progress = Tab:CreateProgress({
     Name = "Health",
+    Desc = "Live from the humanoid",
     CurrentValue = 1,
+    Color = Airflow.Theme.Success,
+    Format = function(Fraction)
+        return math.floor(Fraction * 100) .. " hp"
+    end,
+    Callback = function(Fraction)
+        print("Health:", Fraction)
+    end,
 })
 
 Progress:Set(0.5)
@@ -368,8 +418,11 @@ Progress:Set(0.5)
 ```lua
 local Dropdown = Tab:CreateDropdown({
     Name = "Camera mode",
+    Desc = "Applied to the current camera",
     Options = { "Classic", "Follow", "Orbital", "Track" },
     CurrentOption = "Classic",
+    MultipleOptions = false,
+    SearchAfter = 6,
     Flag = "CameraMode",
     Callback = function(Option)
         print("Camera mode:", Option)
@@ -413,7 +466,11 @@ Clicking the selected row unchecks it. Lists longer than `SearchAfter` get a sea
 ```lua
 local Input = Tab:CreateInput({
     Name = "Player name",
+    Desc = "Partial names work",
+    Icon = "user",
     PlaceholderText = "type here",
+    CurrentValue = "",
+    Numeric = false,
     Flag = "PlayerName",
     Callback = function(Text, EnterPressed)
         print("Input:", Text, EnterPressed)
@@ -452,10 +509,14 @@ Input:Set("Pookie")
 ```lua
 local Keybind = Tab:CreateKeybind({
     Name = "Toggle sprint",
+    Desc = "Press to flip the toggle",
     CurrentKeybind = "F",
     Flag = "SprintKey",
     Callback = function(Key)
         print("Pressed:", Key.Name)
+    end,
+    OnChanged = function(Key)
+        print("Rebound to:", Key.Name)
     end,
 })
 
@@ -493,6 +554,7 @@ Click the chip and press a key to rebind. Escape cancels.
 ```lua
 local ColorPicker = Tab:CreateColorPicker({
     Name = "Highlight colour",
+    Desc = "Applied to every highlight",
     Color = Color3.fromRGB(235, 199, 246),
     Flag = "HighlightColor",
     Callback = function(Color)
@@ -540,6 +602,8 @@ local Notification = Airflow:Notify({
     Duration = 4,
 })
 
+local Notification = Window:Notify({ Title = "Window specific" })
+
 Notification:Dismiss()
 ```
 
@@ -572,12 +636,29 @@ Tab:CreateButton({
         Airflow:Confirm({
             Title = "Unload?",
             Content = "The window closes and everything is restored.",
+            Icon = "power",
             ConfirmText = "Unload",
+            CancelText = "Keep",
             Callback = function()
                 Window:Destroy()
             end,
+            OnCancel = function()
+                print("Kept")
+            end,
         })
     end,
+})
+
+Airflow:Dialog({
+    Title = "Choose",
+    Content = "Pick one.",
+    Icon = "list",
+    CloseOnBackdrop = true,
+    OnCancel = function() end,
+    Buttons = {
+        { Title = "Later", Callback = function() end },
+        { Title = "Now", Variant = "Primary", Callback = function() end },
+    },
 })
 ```
 
@@ -593,7 +674,7 @@ Tab:CreateButton({
 | `Callback` | function | — | Runs when confirmed. |
 | `OnCancel` | function | — | Runs on cancel or a backdrop click. |
 
-`Airflow:Dialog({ Title, Content, Buttons = { { Title, Variant, Callback } } })` builds the same card with any buttons. `CloseOnBackdrop = false` forces a button press.
+`Dialog` builds the same card with any number of buttons. `Variant = "Primary"` gives a button the accent fill. `CloseOnBackdrop = false` forces a button press.
 
 ---
 
@@ -623,6 +704,16 @@ local Window = Airflow:CreateWindow({
 -- create tabs and elements
 
 Window:LoadConfig()
+Window:LoadConfig("pvp", true)
+Window:SaveConfig("pvp")
+Window:DeleteConfig("pvp")
+local Names = Window:ListConfigs()
+
+local Manager = Tab:CreateConfigManager({ Name = "Configs" })
+Manager:Save("pvp")
+Manager:Load("pvp")
+Manager:Delete("pvp")
+Manager:Refresh()
 ```
 
 Requires `writefile` / `readfile`. Keybinds are stored by key name, colours as RGB components. Call `LoadConfig` after every element exists.
@@ -652,8 +743,16 @@ Requires `writefile` / `readfile`. Keybinds are stored by key name, colours as R
 > Any lucide icon, anywhere an `Icon` is accepted.
 
 ```lua
+Airflow:PreloadIcons()
+
 Window:CreateTab({ Name = "Main", Icon = "zap" })
 Tab:CreateButton({ Name = "Rejoin", Icon = "refresh-cw" })
+Tab:CreateInput({ Name = "Key", Icon = "lucide:key-round" })
+Window:CreateTab({ Name = "Custom", Icon = "rbxassetid://103859712365480" })
+Tab:CreateButton({
+    Name = "Sprite",
+    Icon = { Image = "rbxassetid://122605056588923", RectOffset = Vector2.new(325, 775), RectSize = Vector2.new(24, 24) },
+})
 ```
 
 Names resolve through the [Footagesus/Icons](https://github.com/Footagesus/Icons) list, fetched once on first use; `Airflow:PreloadIcons()` fetches it up front. `rbxassetid://` strings and `{ Image, RectOffset, RectSize }` tables also work.
@@ -665,10 +764,28 @@ Names resolve through the [Footagesus/Icons](https://github.com/Footagesus/Icons
 > Colours, fonts and assets. Change them before creating a window.
 
 ```lua
-Airflow.Theme.Accent = Color3.fromRGB(150, 220, 170)
+Airflow.Theme.Background = Color3.fromRGB(20, 16, 20)
+Airflow.Theme.Surface = Color3.fromRGB(24, 19, 24)
+Airflow.Theme.Surface2 = Color3.fromRGB(28, 22, 28)
+Airflow.Theme.Surface3 = Color3.fromRGB(42, 36, 43)
+Airflow.Theme.Stroke = Color3.fromRGB(40, 32, 41)
+Airflow.Theme.StrokeHover = Color3.fromRGB(88, 70, 90)
+Airflow.Theme.Accent = Color3.fromRGB(235, 199, 246)
+Airflow.Theme.AccentDark = Color3.fromRGB(24, 18, 26)
+Airflow.Theme.Text = Color3.fromRGB(233, 229, 234)
+Airflow.Theme.Muted = Color3.fromRGB(125, 115, 126)
+Airflow.Theme.Success = Color3.fromRGB(150, 220, 170)
+Airflow.Theme.Warning = Color3.fromRGB(240, 176, 108)
+Airflow.Theme.Error = Color3.fromRGB(240, 120, 120)
 
-local Family = "rbxasset://fonts/families/Inter.json"
+local Family = "rbxasset://fonts/families/BuilderSans.json"
+Airflow.Fonts.Regular = Font.new(Family, Enum.FontWeight.Regular)
 Airflow.Fonts.Medium = Font.new(Family, Enum.FontWeight.Medium)
+Airflow.Fonts.Bold = Font.new(Family, Enum.FontWeight.SemiBold)
+
+Airflow.Assets.Logo = "rbxassetid://103859712365480"
+Airflow.Assets.Glow = "rbxassetid://8992230677"
+Airflow.Assets.Shadow = "rbxassetid://6014261993"
 ```
 
 ### Properties
