@@ -6,7 +6,7 @@
 local Airflow = loadstring(game:HttpGet("https://raw.githubusercontent.com/PookiePepelsss/Airflow-UI/refs/heads/main/Source.luau"))()
 ```
 
-Every constructor also works without the `Create` prefix. `Tab:Toggle` is the same as `Tab:CreateToggle`.
+Every constructor also works without the `Create` prefix. `Tab:Toggle` is the same as `Tab:CreateToggle`. Every element handle also has `Destroy()`, which removes the card, its listeners and its flag.
 
 ---
 
