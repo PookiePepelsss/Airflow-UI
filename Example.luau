@@ -768,7 +768,7 @@ function Tab:Slider(opts)
         end
     end
 
-    local frame, frameStroke = card(self, "Frame", 64, opts)
+    local frame, frameStroke = card(self, "Frame", CARD_HEIGHT_DESC, opts)
     hoverStroke(frame, frameStroke)
 
     label({
@@ -857,7 +857,7 @@ function Tab:Slider(opts)
     end)
 
     local track = create("Frame", {
-        Position = UDim2.new(0, 14, 0, 46),
+        Position = UDim2.new(0, 14, 0, CARD_HEIGHT_DESC - 18),
         Size = UDim2.new(1, -28, 0, 4),
         BackgroundColor3 = Theme.Surface3,
         BorderSizePixel = 0,
@@ -895,7 +895,7 @@ function Tab:Slider(opts)
     corner(knob, UDim.new(1, 0))
 
     local hit = create("TextButton", {
-        Position = UDim2.new(0, 8, 0, TOUCH and 27 or 33),
+        Position = UDim2.new(0, 8, 0, CARD_HEIGHT_DESC - (TOUCH and 37 or 31)),
         Size = UDim2.new(1, -16, 0, TOUCH and 40 or 28),
         BackgroundTransparency = 1,
         Text = "",
@@ -1502,6 +1502,7 @@ function Tab:Keybind(opts)
             return
         end
         if self_.Listening then
+            self.Window._consumedInput = input
             if input.KeyCode == Enum.KeyCode.Escape then
                 self_.Listening = false
                 render()
@@ -1934,7 +1935,6 @@ function Tab:Progress(opts)
     opts = normalize(opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default" })
     local frame, frameStroke = card(self, "Frame", opts.Desc and CARD_HEIGHT_DESC + 10 or CARD_HEIGHT + 10, opts)
     hoverStroke(frame, frameStroke)
-    local height = frame.Size.Y.Offset
     local top = opts.Desc and (CARD_HEIGHT_DESC - 38) / 2 - 2 or 12
 
     label({
@@ -2215,14 +2215,14 @@ function Library:Window(opts)
         Parent = header,
     })
     applyIcon(logo, opts.Icon or Assets.Logo)
-    local titleLabel = label({
+    label({
         Position = UDim2.fromOffset(60, 25),
         Size = UDim2.new(1, -70, 0, 20),
         Text = opts.Title or "Airflow",
         TextSize = 20,
         Parent = header,
     })
-    local subtitleLabel = label({
+    label({
         Position = UDim2.fromOffset(60, 45),
         Size = UDim2.new(1, -70, 0, 14),
         Text = opts.Subtitle or "",
@@ -2381,7 +2381,11 @@ function Library:Window(opts)
             return
         end
         if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == self.Keybind then
-            self:Toggle(not self.Open)
+            task.defer(function()
+                if self._consumedInput ~= input and not self._destroyed then
+                    self:Toggle(not self.Open)
+                end
+            end)
         end
     end))
 
@@ -2565,6 +2569,9 @@ function Window:_playIntro(morph)
         return
     end
     self._introDone = true
+    task.delay(1, function()
+        self._autoSaveReady = true
+    end)
     local root, body, shadow, scale = self.Root, self.Body, self.Shadow, self.Scale
     if self.CurrentTab then
         self:_revealCards(self.CurrentTab, morph and 0.15 or 0.25)
@@ -2736,7 +2743,6 @@ function Window:_showLoader(opts)
         end)
     end
 
-    local contents = { logoHolder, statusLabel, track }
     task.delay(duration, function()
         tween(fill, { Size = UDim2.fromScale(1, 1) }, 0.25, Enum.EasingStyle.Quint)
         task.delay(0.25, function()
@@ -3042,6 +3048,7 @@ function Window:LoadConfig(name, silent)
         end
     end
     self._autoSaveEnabled = previous
+    self._autoSaveReady = true
     self.ConfigName = name
     return true
 end
@@ -3077,7 +3084,7 @@ function Window:ListConfigs()
 end
 
 function Window:_autoSave()
-    if not self._autoSaveEnabled or self._destroyed then
+    if not self._autoSaveEnabled or self._destroyed or not self._autoSaveReady then
         return
     end
     if self._autoSavePending then
@@ -3333,9 +3340,21 @@ function Window:Dialog(opts)
         })
         table.insert(fading, { content, "TextTransparency", 0 })
         contentHeight = math.max(content.TextBounds.Y, 16) + 6
+        content:GetPropertyChangedSignal("TextBounds"):Connect(function()
+            local newHeight = math.max(content.TextBounds.Y, 16) + 6
+            if newHeight ~= contentHeight then
+                contentHeight = newHeight
+                card.Size = UDim2.fromOffset(WIDTH, PAD + 24 + contentHeight + 12 + 34 + PAD)
+                local rowFrame = card:FindFirstChild("ButtonRow")
+                if rowFrame then
+                    rowFrame.Position = UDim2.fromOffset(PAD, PAD + 24 + contentHeight + 12)
+                end
+            end
+        end)
     end
 
     local row = create("Frame", {
+        Name = "ButtonRow",
         Position = UDim2.fromOffset(PAD, PAD + 24 + contentHeight + 12),
         Size = UDim2.new(1, -PAD * 2, 0, 34),
         BackgroundTransparency = 1,
