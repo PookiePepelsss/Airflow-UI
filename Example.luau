@@ -144,11 +144,15 @@ local Theme = Library.Theme
 local Assets = Library.Assets
 local Fonts = Library.Fonts
 
+local TOUCH = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+Library.Touch = TOUCH
+
 local SIDEBAR_WIDTH = 170
 local HEADER_HEIGHT = 72
-local CARD_HEIGHT = 48
-local CARD_HEIGHT_DESC = 64
-local DROPDOWN_OPTION_HEIGHT = 34
+local CARD_HEIGHT = TOUCH and 54 or 48
+local CARD_HEIGHT_DESC = TOUCH and 70 or 64
+local DROPDOWN_OPTION_HEIGHT = TOUCH and 40 or 34
+local CHIP_HEIGHT = TOUCH and 34 or 28
 
 local function tween(object, props, duration, style, direction)
     local info = TweenInfo.new(
@@ -455,14 +459,15 @@ end
 local function titleDesc(parent, name, desc, rightReserve)
     local title
     if desc then
+        local top = (CARD_HEIGHT_DESC - 38) / 2
         title = label({
-            Position = UDim2.fromOffset(14, 13),
+            Position = UDim2.fromOffset(14, top),
             Size = UDim2.new(1, -(14 + rightReserve), 0, 18),
             Text = name,
             Parent = parent,
         })
         label({
-            Position = UDim2.fromOffset(14, 33),
+            Position = UDim2.fromOffset(14, top + 20),
             Size = UDim2.new(1, -(14 + rightReserve), 0, 17),
             Text = desc,
             TextSize = 13,
@@ -671,7 +676,7 @@ function Tab:Toggle(opts)
     local pill = create("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, -14, 0.5, 0),
-        Size = UDim2.fromOffset(36, 20),
+        Size = TOUCH and UDim2.fromOffset(44, 24) or UDim2.fromOffset(36, 20),
         BackgroundColor3 = Theme.Surface3,
         BorderSizePixel = 0,
         Parent = button,
@@ -682,7 +687,7 @@ function Tab:Toggle(opts)
     local knob = create("Frame", {
         AnchorPoint = Vector2.new(0, 0.5),
         Position = UDim2.new(0, 3, 0.5, 0),
-        Size = UDim2.fromOffset(14, 14),
+        Size = TOUCH and UDim2.fromOffset(18, 18) or UDim2.fromOffset(14, 14),
         BackgroundColor3 = Theme.Muted,
         BorderSizePixel = 0,
         Parent = pill,
@@ -707,15 +712,15 @@ function Tab:Toggle(opts)
         local duration = animate and 0.25 or 0
         tween(pill, { BackgroundColor3 = on and Theme.Accent or Theme.Surface3 }, duration)
         tween(pillGlow, { ImageTransparency = on and 0.75 or 1 }, duration)
+        local knobSize = TOUCH and 18 or 14
         tween(knob, {
-            Position = on and UDim2.new(0, 19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+            Position = on and UDim2.new(0, (TOUCH and 44 or 36) - 3 - knobSize, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
             BackgroundColor3 = on and Theme.AccentDark or Theme.Muted,
         }, duration, Enum.EasingStyle.Back)
         if animate then
-
-            tween(knob, { Size = UDim2.fromOffset(18, 12) }, 0.08)
+            tween(knob, { Size = UDim2.fromOffset(knobSize + 4, knobSize - 2) }, 0.08)
             task.delay(0.08, function()
-                tween(knob, { Size = UDim2.fromOffset(14, 14) }, 0.2, Enum.EasingStyle.Back)
+                tween(knob, { Size = UDim2.fromOffset(knobSize, knobSize) }, 0.2, Enum.EasingStyle.Back)
             end)
         end
     end
@@ -890,8 +895,8 @@ function Tab:Slider(opts)
     corner(knob, UDim.new(1, 0))
 
     local hit = create("TextButton", {
-        Position = UDim2.new(0, 8, 0, 33),
-        Size = UDim2.new(1, -16, 0, 28),
+        Position = UDim2.new(0, 8, 0, TOUCH and 27 or 33),
+        Size = UDim2.new(1, -16, 0, TOUCH and 40 or 28),
         BackgroundTransparency = 1,
         Text = "",
         AutoButtonColor = false,
@@ -1073,7 +1078,7 @@ function Tab:Dropdown(opts)
     local chip = create("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, -10, 0.5, 0),
-        Size = UDim2.fromOffset(0, 28),
+        Size = UDim2.fromOffset(0, CHIP_HEIGHT),
         AutomaticSize = Enum.AutomaticSize.X,
         BackgroundColor3 = Theme.Surface,
         BorderSizePixel = 0,
@@ -1082,7 +1087,7 @@ function Tab:Dropdown(opts)
     corner(chip, UDim.new(0, 6))
     local chipStroke = stroke(chip)
     padding(chip, 10, 6)
-    create("UISizeConstraint", { MaxSize = Vector2.new(190, 28), Parent = chip })
+    create("UISizeConstraint", { MaxSize = Vector2.new(190, CHIP_HEIGHT), Parent = chip })
     local valueLabel = label({
         Size = UDim2.new(0, 0, 1, 0),
         AutomaticSize = Enum.AutomaticSize.X,
@@ -1439,7 +1444,7 @@ function Tab:Keybind(opts)
     local chip = create("TextButton", {
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, -10, 0.5, 0),
-        Size = UDim2.fromOffset(44, 28),
+        Size = UDim2.fromOffset(44, CHIP_HEIGHT),
         BackgroundColor3 = Theme.Surface,
         BorderSizePixel = 0,
         Text = "",
@@ -1461,11 +1466,11 @@ function Tab:Keybind(opts)
     local self_ = { Value = opts.Default, Listening = false }
 
     local function fitChip(instant)
-        local width = math.max(chipLabel.TextBounds.X + 20, 36)
+        local width = math.max(chipLabel.TextBounds.X + 20, TOUCH and 44 or 36)
         if instant then
-            chip.Size = UDim2.fromOffset(width, 28)
+            chip.Size = UDim2.fromOffset(width, CHIP_HEIGHT)
         else
-            tween(chip, { Size = UDim2.fromOffset(width, 28) }, 0.2)
+            tween(chip, { Size = UDim2.fromOffset(width, CHIP_HEIGHT) }, 0.2)
         end
     end
     chipLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
@@ -1780,6 +1785,236 @@ function Tab:ColorPicker(opts)
     render(0)
     return registerFlag(opts, self_, self, "ColorPicker")
 end
+
+function Tab:Stepper(opts)
+    opts = normalize(opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default", Increment = "Step" })
+    local min = opts.Min or 0
+    local max = opts.Max or 100
+    local step = opts.Step or 1
+    local suffix = opts.Suffix or ""
+    local decimals = 0
+    do
+        local text = tostring(step)
+        local dot = text:find("%.")
+        if dot then
+            decimals = #text - dot
+        end
+    end
+    local height = opts.Desc and CARD_HEIGHT_DESC or CARD_HEIGHT
+    local frame, frameStroke = card(self, "Frame", height, opts)
+    hoverStroke(frame, frameStroke)
+    titleDesc(frame, opts.Name or "Stepper", opts.Desc, 150)
+
+    local group = create("Frame", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -10, 0.5, 0),
+        Size = UDim2.fromOffset(0, CHIP_HEIGHT),
+        AutomaticSize = Enum.AutomaticSize.X,
+        BackgroundColor3 = Theme.Surface,
+        BorderSizePixel = 0,
+        Parent = frame,
+    })
+    corner(group, UDim.new(0, 6))
+    local groupStroke = stroke(group)
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        VerticalAlignment = Enum.VerticalAlignment.Center,
+        Parent = group,
+    })
+
+    local function stepButton(text, order)
+        local button = create("TextButton", {
+            Size = UDim2.fromOffset(CHIP_HEIGHT, CHIP_HEIGHT),
+            BackgroundTransparency = 1,
+            Text = text,
+            TextColor3 = Theme.Muted,
+            TextSize = 18,
+            FontFace = Fonts.Medium,
+            AutoButtonColor = false,
+            LayoutOrder = order,
+            Parent = group,
+        })
+        button.MouseEnter:Connect(function()
+            tween(button, { TextColor3 = Theme.Accent }, 0.12)
+        end)
+        button.MouseLeave:Connect(function()
+            tween(button, { TextColor3 = Theme.Muted }, 0.2)
+        end)
+        return button
+    end
+    local minus = stepButton("−", 1)
+    local valueLabel = label({
+        Size = UDim2.new(0, 30, 1, 0),
+        TextSize = 13,
+        TextColor3 = Theme.Accent,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextTruncate = Enum.TextTruncate.None,
+        LayoutOrder = 2,
+        Parent = group,
+    })
+    local plus = stepButton("+", 3)
+    local function fitValue(instant)
+        local width = math.max(valueLabel.TextBounds.X + 12, 30)
+        if instant then
+            valueLabel.Size = UDim2.new(0, width, 1, 0)
+        else
+            tween(valueLabel, { Size = UDim2.new(0, width, 1, 0) }, 0.2)
+        end
+    end
+    valueLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
+        fitValue(false)
+    end)
+
+    local self_ = { Value = math.clamp(opts.Default or min, min, max) }
+    local function snap(value)
+        value = math.floor(value / step + 0.5) * step
+        return math.clamp(value, min, max)
+    end
+    local function render()
+        valueLabel.Text = string.format("%." .. decimals .. "f", self_.Value) .. suffix
+        tween(minus, { TextTransparency = self_.Value <= min and 0.6 or 0 }, 0.15)
+        tween(plus, { TextTransparency = self_.Value >= max and 0.6 or 0 }, 0.15)
+    end
+    function self_:Set(value, silent)
+        value = snap(tonumber(value) or min)
+        if value == self_.Value then
+            return
+        end
+        self_.Value = value
+        render()
+        if not silent then
+            safeCall(opts.Callback, value)
+        end
+    end
+    function self_:Get()
+        return self_.Value
+    end
+
+    local function bump(direction)
+        self_:Set(self_.Value + direction * step)
+        tween(groupStroke, { Color = Theme.StrokeHover }, 0.08)
+        task.delay(0.12, function()
+            tween(groupStroke, { Color = Theme.Stroke }, 0.2)
+        end)
+    end
+    local function holdRepeat(button, direction)
+        local holding = false
+        button.InputBegan:Connect(function(input)
+            if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+                return
+            end
+            holding = true
+            bump(direction)
+            task.delay(0.4, function()
+                while holding do
+                    bump(direction)
+                    task.wait(0.07)
+                end
+            end)
+        end)
+        button.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                holding = false
+            end
+        end)
+        button.MouseLeave:Connect(function()
+            holding = false
+        end)
+    end
+    holdRepeat(minus, -1)
+    holdRepeat(plus, 1)
+
+    render()
+    task.defer(fitValue, true)
+    return registerFlag(opts, self_, self, "Stepper")
+end
+
+function Tab:Progress(opts)
+    opts = normalize(opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default" })
+    local frame, frameStroke = card(self, "Frame", opts.Desc and CARD_HEIGHT_DESC + 10 or CARD_HEIGHT + 10, opts)
+    hoverStroke(frame, frameStroke)
+    local height = frame.Size.Y.Offset
+    local top = opts.Desc and (CARD_HEIGHT_DESC - 38) / 2 - 2 or 12
+
+    label({
+        Position = UDim2.fromOffset(14, top),
+        Size = UDim2.new(1, -110, 0, 18),
+        Text = opts.Name or "Progress",
+        Parent = frame,
+    })
+    if opts.Desc then
+        label({
+            Position = UDim2.fromOffset(14, top + 20),
+            Size = UDim2.new(1, -110, 0, 17),
+            Text = opts.Desc,
+            TextSize = 13,
+            FontFace = Fonts.Regular,
+            TextColor3 = Theme.Muted,
+            Parent = frame,
+        })
+    end
+    local valueLabel = label({
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -14, 0, top),
+        Size = UDim2.fromOffset(90, 18),
+        TextXAlignment = Enum.TextXAlignment.Right,
+        TextSize = 13,
+        TextColor3 = Theme.Accent,
+        Parent = frame,
+    })
+    local track = create("Frame", {
+        Position = UDim2.new(0, 14, 1, -16),
+        Size = UDim2.new(1, -28, 0, 5),
+        BackgroundColor3 = Theme.Surface3,
+        BorderSizePixel = 0,
+        Parent = frame,
+    })
+    corner(track, UDim.new(1, 0))
+    local fill = create("Frame", {
+        Size = UDim2.new(0, 0, 1, 0),
+        BackgroundColor3 = opts.Color or Theme.Accent,
+        BorderSizePixel = 0,
+        Parent = track,
+    })
+    corner(fill, UDim.new(1, 0))
+
+    local self_ = { Value = math.clamp(opts.Default or 0, 0, 1) }
+    local formatter = opts.Format
+    local function render(duration)
+        local frac = self_.Value
+        tween(fill, { Size = UDim2.new(frac, 0, 1, 0) }, duration, Enum.EasingStyle.Quint)
+        if type(formatter) == "function" then
+            valueLabel.Text = tostring(formatter(frac))
+        else
+            valueLabel.Text = string.format("%d%%", math.floor(frac * 100 + 0.5))
+        end
+    end
+    function self_:Set(value, silent)
+        value = math.clamp(tonumber(value) or 0, 0, 1)
+        if value == self_.Value then
+            return
+        end
+        self_.Value = value
+        render(0.35)
+        if not silent then
+            safeCall(opts.Callback, value)
+        end
+    end
+    function self_:Get()
+        return self_.Value
+    end
+    function self_:SetColor(color)
+        fill.BackgroundColor3 = color
+    end
+    render(0)
+    self_._type = "Progress"
+    return self_
+end
+
+Tab.CreateStepper = Tab.Stepper
+Tab.CreateProgress = Tab.Progress
+Tab.CreateProgressBar = Tab.Progress
 
 function Tab:ConfigManager(opts)
     opts = normalize(opts, {})
@@ -2325,22 +2560,32 @@ function Window:_revealCards(tab, baseDelay)
     end
 end
 
-function Window:_playIntro()
+function Window:_playIntro(morph)
     if self._introDone then
         return
     end
     self._introDone = true
     local root, body, shadow, scale = self.Root, self.Body, self.Shadow, self.Scale
     if self.CurrentTab then
-        self:_revealCards(self.CurrentTab, 0.25)
+        self:_revealCards(self.CurrentTab, morph and 0.15 or 0.25)
     end
     root.Visible = true
-    root.Position = UDim2.new(0.5, 0, 0.5, 24)
-    tween(scale, { Scale = self._fitScale or 1 }, 0.5, Enum.EasingStyle.Back)
-    tween(root, { Position = UDim2.fromScale(0.5, 0.5) }, 0.5, Enum.EasingStyle.Quint)
-    tween(body, { GroupTransparency = 0 }, 0.35)
-    tween(self.BodyStroke, { Transparency = 0 }, 0.35)
-    tween(shadow, { ImageTransparency = 0.6 }, 0.5)
+    if morph then
+        scale.Scale = self._fitScale or 1
+        root.Position = UDim2.fromScale(0.5, 0.5)
+        tween(body, { GroupTransparency = 0 }, 0.3)
+        tween(self.BodyStroke, { Transparency = 0 }, 0.3)
+        tween(shadow, { ImageTransparency = 0.6 }, 0.3)
+    else
+        root.Position = UDim2.new(0.5, 0, 0.5, 24)
+        tween(scale, { Scale = self._fitScale or 1 }, 0.5, Enum.EasingStyle.Back)
+        tween(root, { Position = UDim2.fromScale(0.5, 0.5) }, 0.5, Enum.EasingStyle.Quint)
+        tween(body, { GroupTransparency = 0 }, 0.35)
+        tween(self.BodyStroke, { Transparency = 0 }, 0.35)
+    end
+    if not morph then
+        tween(shadow, { ImageTransparency = 0.6 }, 0.5)
+    end
 
     for index, tab in ipairs(self.Tabs) do
         popIn(tab._button, 0.1 + index * 0.05)
@@ -2366,7 +2611,7 @@ function Window:_showLoader(opts)
         ZIndex = 10,
         Parent = gui,
     })
-    corner(loader, UDim.new(0, 12))
+    local loaderCorner = corner(loader, UDim.new(0, 12))
     local loaderStroke = stroke(loader, Theme.Stroke, 1)
     edgeHighlight(loader)
     glow(loader, UDim2.fromOffset(320, 140), UDim2.new(1, -20, 0, -20), 0.85, 90)
@@ -2491,18 +2736,39 @@ function Window:_showLoader(opts)
         end)
     end
 
+    local contents = { logoHolder, statusLabel, track }
     task.delay(duration, function()
         tween(fill, { Size = UDim2.fromScale(1, 1) }, 0.25, Enum.EasingStyle.Quint)
         task.delay(0.25, function()
             sweep:Cancel()
-            tween(loader, { GroupTransparency = 1, Position = UDim2.new(0.5, 0, 0.5, -12) }, 0.3, Enum.EasingStyle.Quint)
-            tween(loaderScale, { Scale = 0.94 }, 0.3, Enum.EasingStyle.Quint)
-            tween(loaderStroke, { Transparency = 1 }, 0.2)
-            tween(loaderShadow, { ImageTransparency = 1 }, 0.25)
-            task.delay(0.18, function()
-                self:_playIntro()
+            for _, item in ipairs(loader:GetChildren()) do
+                if item:IsA("TextLabel") then
+                    tween(item, { TextTransparency = 1 }, 0.15)
+                end
+            end
+            for _, item in ipairs(logoHolder:GetChildren()) do
+                tween(item, { ImageTransparency = 1 }, 0.15)
+            end
+            tween(track, { BackgroundTransparency = 1 }, 0.15)
+            tween(fill, { BackgroundTransparency = 1 }, 0.15)
+            tween(sheen, { BackgroundTransparency = 1 }, 0.1)
+
+            local fit = self._fitScale or 1
+            local target = self.Root.Size
+            tween(loader, {
+                Size = UDim2.fromOffset(target.X.Offset * fit, target.Y.Offset * fit),
+                Position = UDim2.fromScale(0.5, 0.5),
+            }, 0.5, Enum.EasingStyle.Quint)
+            tween(loaderCorner, { CornerRadius = UDim.new(0, 10) }, 0.5, Enum.EasingStyle.Quint)
+            tween(loaderScale, { Scale = 1 }, 0.5, Enum.EasingStyle.Quint)
+
+            task.delay(0.28, function()
+                self:_playIntro(true)
+                tween(loader, { GroupTransparency = 1 }, 0.25)
+                tween(loaderStroke, { Transparency = 1 }, 0.2)
+                tween(loaderShadow, { ImageTransparency = 1 }, 0.2)
             end)
-            task.delay(0.35, function()
+            task.delay(0.6, function()
                 loader:Destroy()
             end)
         end)
@@ -3554,6 +3820,30 @@ Player:CreateSlider({
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.5)
     applyMovement()
+end)
+
+Player:CreateStepper({
+    Name = "Fall damage threshold",
+    Range = { 0, 100 },
+    Increment = 5,
+    Suffix = " studs",
+    CurrentValue = 50,
+    Flag = "FallThreshold",
+    Callback = function(value)
+        print("fall threshold", value)
+    end,
+})
+
+local health = Player:CreateProgress({
+    Name = "Health",
+    Desc = "Live from the humanoid",
+    CurrentValue = 1,
+})
+RunService.Heartbeat:Connect(function()
+    local hum = humanoid()
+    if hum and hum.MaxHealth > 0 then
+        health:Set(hum.Health / hum.MaxHealth, true)
+    end
 end)
 
 Player:CreateSection("Character")
