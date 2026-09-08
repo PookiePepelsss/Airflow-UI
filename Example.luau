@@ -2363,6 +2363,7 @@ function Library:Window(opts)
 
     self:_enableDrag()
     self.MaxSize = opts.MaxSize
+    self.KeepOnScreen = opts.KeepOnScreen ~= false
     self:_enableResize(opts.MinSize or Vector2.new(480, 320))
 
     local saving = opts.ConfigurationSaving
@@ -2643,17 +2644,6 @@ function Window:_showLoader(opts)
         BackgroundTransparency = 1,
         Parent = loader,
     })
-    local logoGlow = create("ImageLabel", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromScale(1.2, 1.2),
-        BackgroundTransparency = 1,
-        Image = Assets.Glow,
-        ImageColor3 = Theme.Accent,
-        ImageTransparency = 1,
-        ZIndex = 0,
-        Parent = logoHolder,
-    })
     local logo = create("ImageLabel", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
@@ -2668,10 +2658,6 @@ function Window:_showLoader(opts)
     applyIcon(logo, opts.Icon or Assets.Logo)
     task.delay(0.15, function()
         tween(logo, { Size = UDim2.fromScale(0.85, 0.85), Rotation = 0, ImageTransparency = 0 }, 0.6, Enum.EasingStyle.Back)
-        tween(logoGlow, { Size = UDim2.fromScale(3.2, 3.2), ImageTransparency = 0.55 }, 0.7, Enum.EasingStyle.Quint)
-        task.delay(0.7, function()
-            tween(logoGlow, { Size = UDim2.fromScale(2.6, 2.6), ImageTransparency = 0.8 }, 0.8, Enum.EasingStyle.Sine)
-        end)
     end)
     label({
         Position = UDim2.fromOffset(78, 30),
@@ -2799,6 +2785,9 @@ function Window:_fitToScreen(instant)
 end
 
 function Window:_clampToScreen()
+    if not self.KeepOnScreen then
+        return
+    end
     local viewport = self.Gui.AbsoluteSize
     local root = self.Root
     local half = root.AbsoluteSize / 2
@@ -3565,6 +3554,13 @@ function Window:Toggle(open)
                 self.Root.Visible = false
             end
         end)
+    end
+end
+
+function Window:SetKeepOnScreen(enabled)
+    self.KeepOnScreen = enabled ~= false
+    if self.KeepOnScreen then
+        self:_clampToScreen()
     end
 end
 
