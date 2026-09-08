@@ -13,11 +13,15 @@ Library.__index = Library
 Library.Flags = {}
 Library.Windows = {}
 
-local function normalize(opts, map)
-    if type(opts) == "string" then
-        opts = { Name = opts }
+local function normalize(source, map)
+    local opts = {}
+    if type(source) == "string" then
+        opts.Name = source
+    elseif type(source) == "table" then
+        for key, value in pairs(source) do
+            opts[key] = value
+        end
     end
-    opts = opts or {}
     for from, to in pairs(map or {}) do
         if opts[to] == nil and opts[from] ~= nil then
             opts[to] = opts[from]
@@ -30,11 +34,13 @@ local function normalize(opts, map)
     return opts
 end
 
-local function registerFlag(opts, element, tab, kind)
+local function finishElement(tab, opts, element, frame, kind)
     element._type = kind
+    element._frame = frame
+    element._listeners = element._listeners or {}
+    local window = tab and tab.Window
     if opts.Flag then
         Library.Flags[opts.Flag] = element
-        local window = tab and tab.Window
         if window then
             local callback = opts.Callback
             opts.Callback = function(...)
@@ -43,6 +49,30 @@ local function registerFlag(opts, element, tab, kind)
                 end
                 window:_autoSave()
             end
+        end
+    end
+    function element:Destroy()
+        if element._destroyed then
+            return
+        end
+        element._destroyed = true
+        for _, disconnect in ipairs(element._listeners) do
+            disconnect()
+        end
+        element._listeners = {}
+        if opts.Flag and Library.Flags[opts.Flag] == element then
+            Library.Flags[opts.Flag] = nil
+        end
+        if window then
+            for index, control in ipairs(window._controls) do
+                if control == frame then
+                    table.remove(window._controls, index)
+                    break
+                end
+            end
+        end
+        if frame then
+            frame:Destroy()
         end
     end
     return element
@@ -296,6 +326,14 @@ local function pointerPosition()
     return UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
 end
 
+local function isPress(input)
+    return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
+end
+
+local function isMove(input)
+    return input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch
+end
+
 local function glowIcon(parent, icon, color, position)
     local holder = create("Frame", {
         AnchorPoint = Vector2.new(0, 0.5),
@@ -437,6 +475,25 @@ local function safeCall(callback, ...)
     end
 end
 
+local function numberFormat(min, max, step)
+    local decimals = 0
+    local text = tostring(step)
+    local dot = text:find("%.")
+    if dot then
+        decimals = #text - dot
+    end
+    local pattern = "%." .. decimals .. "f"
+    return {
+        snap = function(value)
+            value = math.floor(value / step + 0.5) * step
+            return math.clamp(value, min, max)
+        end,
+        format = function(value)
+            return string.format(pattern, value)
+        end,
+    }
+end
+
 local function card(tab, className, height, opts)
     local props = {
         Size = UDim2.new(1, 0, 0, height),
@@ -486,6 +543,18 @@ local function titleDesc(parent, name, desc, rightReserve)
     return title
 end
 
+local function beginElement(tab, opts, map, className, rightReserve, fallbackName)
+    opts = normalize(opts, map)
+    local height = opts.Desc and CARD_HEIGHT_DESC or CARD_HEIGHT
+    local frame, frameStroke = card(tab, className or "Frame", height, opts)
+    hoverStroke(frame, frameStroke)
+    local title
+    if rightReserve then
+        title = titleDesc(frame, opts.Name or fallbackName, opts.Desc, rightReserve)
+    end
+    return opts, frame, frameStroke, height, title
+end
+
 local Tab = {}
 Tab.__index = Tab
 
@@ -527,21 +596,22 @@ function Tab:Section(text)
     task.defer(function()
         rule.Size = UDim2.new(1, -(text_.AbsoluteSize.X + 14), 0, 1)
     end)
-    return {
+    return finishElement(self, {}, {
         Set = function(_, value)
             text_.Text = string.upper(value)
         end,
-    }
+    }, holder, "Section")
 end
 
 function Tab:Divider()
-    create("Frame", {
+    local line = create("Frame", {
         Size = UDim2.new(1, 0, 0, 1),
         BackgroundColor3 = Theme.Stroke,
         BorderSizePixel = 0,
         LayoutOrder = self:_nextOrder(),
         Parent = self.List,
     })
+    return finishElement(self, {}, {}, line, "Divider")
 end
 
 function Tab:Label(opts)
@@ -556,11 +626,11 @@ function Tab:Label(opts)
         Parent = self.List,
     })
     padding(text_, 2)
-    return {
+    return finishElement(self, opts, {
         Set = function(_, value)
             text_.Text = value
         end,
-    }
+    }, text_, "Label")
 end
 
 function Tab:Paragraph(opts)
@@ -592,11 +662,11 @@ function Tab:Paragraph(opts)
         LayoutOrder = 2,
         Parent = frame,
     })
-    return {
+    return finishElement(self, opts, {
         Set = function(_, value)
             content.Text = value
         end,
-    }
+    }, frame, "Paragraph")
 end
 
 function Tab:Button(opts)
@@ -659,19 +729,16 @@ function Tab:Button(opts)
         safeCall(opts.Callback)
     end)
 
-    return {
+    return finishElement(self, opts, {
         SetText = function(_, value)
             title.Text = value
         end,
-    }
+    }, button, "Button")
 end
 
 function Tab:Toggle(opts)
-    opts = normalize(opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default" })
-    local height = opts.Desc and CARD_HEIGHT_DESC or CARD_HEIGHT
-    local button, buttonStroke = card(self, "TextButton", height, opts)
-    hoverStroke(button, buttonStroke)
-    titleDesc(button, opts.Name or "Toggle", opts.Desc, 56)
+    local button
+    opts, button = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default" }, "TextButton", 56, "Toggle")
 
     local pill = create("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
@@ -746,7 +813,7 @@ function Tab:Toggle(opts)
         self_:Set(not self_.Value)
     end)
 
-    local handle = registerFlag(opts, self_, self, "Toggle")
+    local handle = finishElement(self, opts, self_, button, "Toggle")
     if self_.Value then
         safeCall(opts.Callback, true)
     end
@@ -759,14 +826,7 @@ function Tab:Slider(opts)
     local max = opts.Max or 100
     local step = opts.Step or 1
     local suffix = opts.Suffix or ""
-    local decimals = 0
-    do
-        local text = tostring(step)
-        local dot = text:find("%.")
-        if dot then
-            decimals = #text - dot
-        end
-    end
+    local numbers = numberFormat(min, max, step)
 
     local frame, frameStroke = card(self, "Frame", CARD_HEIGHT_DESC, opts)
     hoverStroke(frame, frameStroke)
@@ -916,7 +976,7 @@ function Tab:Slider(opts)
     end)
     chipButton.MouseButton1Click:Connect(function()
         editing = true
-        valueBox.Text = string.format("%." .. decimals .. "f", self_.Value)
+        valueBox.Text = numbers.format(self_.Value)
         valueLabel.Visible = false
         valueBox.Visible = true
         suffixLabel.Visible = suffix ~= ""
@@ -949,10 +1009,7 @@ function Tab:Slider(opts)
         end
     end)
 
-    local function snap(value)
-        value = math.floor(value / step + 0.5) * step
-        return math.clamp(value, min, max)
-    end
+    local snap = numbers.snap
 
     local function fraction()
         return (max - min) == 0 and 0 or (self_.Value - min) / (max - min)
@@ -967,7 +1024,7 @@ function Tab:Slider(opts)
 
     local function render(duration, style)
         moveTo(fraction(), duration, style)
-        valueLabel.Text = string.format("%." .. decimals .. "f", self_.Value) .. suffix
+        valueLabel.Text = numbers.format(self_.Value) .. suffix
     end
 
     local function settleTo(previousFrac)
@@ -980,7 +1037,7 @@ function Tab:Slider(opts)
                 moveTo(fraction(), 0.18, Enum.EasingStyle.Quint)
             end
         end)
-        valueLabel.Text = string.format("%." .. decimals .. "f", self_.Value) .. suffix
+        valueLabel.Text = numbers.format(self_.Value) .. suffix
     end
 
     local function bounceKnob()
@@ -1020,7 +1077,7 @@ function Tab:Slider(opts)
     end
 
     hit.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if isPress(input) then
             dragging = true
             tween(knob, { Size = UDim2.fromOffset(16, 16) }, 0.15, Enum.EasingStyle.Back)
             tween(knobGlow, { Size = UDim2.fromOffset(44, 44), ImageTransparency = 0.7 }, 0.15)
@@ -1028,27 +1085,24 @@ function Tab:Slider(opts)
         end
     end)
 
-    table.insert(self.Window._connections, UserInputService.InputChanged:Connect(function(input)
-        if not dragging then
-            return
-        end
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+    self.Window:_listen("Changed", function(input)
+        if dragging and isMove(input) then
             updateFromX(pointerPosition().X)
         end
-    end))
+    end, self_)
 
-    table.insert(self.Window._connections, UserInputService.InputEnded:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+    self.Window:_listen("Ended", function(input)
+        if dragging and isPress(input) then
             dragging = false
             tween(knob, { Size = UDim2.fromOffset(12, 12) }, 0.2)
             tween(knobGlow, { Size = UDim2.fromOffset(28, 28), ImageTransparency = 0.85 }, 0.2)
         end
-    end))
+    end, self_)
 
     self_.Value = snap(self_.Value)
     render(0)
     task.defer(fitChip, true)
-    return registerFlag(opts, self_, self, "Slider")
+    return finishElement(self, opts, self_, frame, "Slider")
 end
 
 function Tab:Dropdown(opts)
@@ -1060,11 +1114,9 @@ function Tab:Dropdown(opts)
     end
     local multi = opts.Multi == true
     local options = opts.Options or {}
-    local height = opts.Desc and CARD_HEIGHT_DESC or CARD_HEIGHT
-
-    local frame, frameStroke = card(self, "Frame", height, opts)
+    local frame, _, height
+    opts, frame, _, height = beginElement(self, opts, {}, "Frame")
     frame.ClipsDescendants = true
-    hoverStroke(frame, frameStroke)
 
     local header = create("TextButton", {
         Size = UDim2.new(1, 0, 0, height),
@@ -1078,26 +1130,33 @@ function Tab:Dropdown(opts)
     local chip = create("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, -10, 0.5, 0),
-        Size = UDim2.fromOffset(0, CHIP_HEIGHT),
-        AutomaticSize = Enum.AutomaticSize.X,
+        Size = UDim2.fromOffset(60, CHIP_HEIGHT),
         BackgroundColor3 = Theme.Surface,
         BorderSizePixel = 0,
+        ClipsDescendants = true,
         Parent = header,
     })
     corner(chip, UDim.new(0, 6))
     local chipStroke = stroke(chip)
-    padding(chip, 10, 6)
-    create("UISizeConstraint", { MaxSize = Vector2.new(190, CHIP_HEIGHT), Parent = chip })
     local valueLabel = label({
-        Size = UDim2.new(0, 0, 1, 0),
-        AutomaticSize = Enum.AutomaticSize.X,
+        Position = UDim2.fromOffset(10, 0),
+        Size = UDim2.new(1, -34, 1, 0),
         TextColor3 = Theme.Muted,
         TextSize = 13,
         Parent = chip,
     })
-    create("UISizeConstraint", { MaxSize = Vector2.new(150, 28), Parent = valueLabel })
-    local arrow = arrowIndicator(chip, 1, 0)
-    padding(valueLabel, 0, 18)
+    local arrow = arrowIndicator(chip, 1, -6)
+    local function fitChip(instant)
+        local width = math.clamp(valueLabel.TextBounds.X + 10 + 34, 60, 190)
+        if instant then
+            chip.Size = UDim2.fromOffset(width, CHIP_HEIGHT)
+        else
+            tween(chip, { Size = UDim2.fromOffset(width, CHIP_HEIGHT) }, 0.2)
+        end
+    end
+    valueLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
+        fitChip(false)
+    end)
 
     local listHolder = create("Frame", {
         Position = UDim2.new(0, 10, 0, height),
@@ -1363,15 +1422,13 @@ function Tab:Dropdown(opts)
     end)
     buildOptions()
     renderValueLabel()
-    return registerFlag(opts, self_, self, "Dropdown")
+    task.defer(fitChip, true)
+    return finishElement(self, opts, self_, frame, "Dropdown")
 end
 
 function Tab:Input(opts)
-    opts = normalize(opts, { Title = "Name", Description = "Desc", PlaceholderText = "Placeholder", CurrentValue = "Default", Value = "Default" })
-    local height = opts.Desc and CARD_HEIGHT_DESC or CARD_HEIGHT
-    local frame, frameStroke = card(self, "Frame", height, opts)
-    hoverStroke(frame, frameStroke)
-    titleDesc(frame, opts.Name or "Input", opts.Desc, 160)
+    local frame
+    opts, frame = beginElement(self, opts, { Title = "Name", Description = "Desc", PlaceholderText = "Placeholder", CurrentValue = "Default", Value = "Default" }, "Frame", 160, "Input")
 
     local boxHolder = create("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
@@ -1421,25 +1478,22 @@ function Tab:Input(opts)
         safeCall(opts.Callback, box.Text, enterPressed)
     end)
 
-    return registerFlag(opts, {
+    return finishElement(self, opts, {
         Set = function(_, value)
             box.Text = tostring(value)
         end,
         Get = function()
             return box.Text
         end,
-    }, self, "Input")
+    }, frame, "Input")
 end
 
 function Tab:Keybind(opts)
-    opts = normalize(opts, { Title = "Name", Description = "Desc", CurrentKeybind = "Default", Value = "Default" })
+    local frame
+    opts, frame = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentKeybind = "Default", Value = "Default" }, "Frame", 110, "Keybind")
     if type(opts.Default) == "string" then
         opts.Default = Enum.KeyCode[opts.Default]
     end
-    local height = opts.Desc and CARD_HEIGHT_DESC or CARD_HEIGHT
-    local frame, frameStroke = card(self, "Frame", height, opts)
-    hoverStroke(frame, frameStroke)
-    titleDesc(frame, opts.Name or "Keybind", opts.Desc, 110)
 
     local chip = create("TextButton", {
         AnchorPoint = Vector2.new(1, 0.5),
@@ -1497,7 +1551,7 @@ function Tab:Keybind(opts)
         render()
     end)
 
-    table.insert(self.Window._connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    self.Window:_listen("Began", function(input, gameProcessed)
         if input.UserInputType ~= Enum.UserInputType.Keyboard then
             return
         end
@@ -1515,24 +1569,21 @@ function Tab:Keybind(opts)
         if not gameProcessed and self_.Value ~= nil and input.KeyCode == self_.Value then
             safeCall(opts.Callback, input.KeyCode)
         end
-    end))
+    end, self_)
 
     render()
     task.defer(fitChip, true)
     function self_:Get()
         return self_.Value
     end
-    return registerFlag(opts, self_, self, "Keybind")
+    return finishElement(self, opts, self_, frame, "Keybind")
 end
 
 function Tab:ColorPicker(opts)
-    opts = normalize(opts, { Title = "Name", Description = "Desc", Color = "Default", CurrentValue = "Default", Value = "Default" })
-    local height = opts.Desc and CARD_HEIGHT_DESC or CARD_HEIGHT
     local PANEL_HEIGHT = 168
-
-    local frame, frameStroke = card(self, "Frame", height, opts)
+    local frame, _, height
+    opts, frame, _, height = beginElement(self, opts, { Title = "Name", Description = "Desc", Color = "Default", CurrentValue = "Default", Value = "Default" }, "Frame")
     frame.ClipsDescendants = true
-    hoverStroke(frame, frameStroke)
 
     local header = create("TextButton", {
         Size = UDim2.new(1, 0, 0, height),
@@ -1737,39 +1788,37 @@ function Tab:ColorPicker(opts)
     end
 
     svBox.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if isPress(input) then
             dragTarget = "sv"
             tween(svCursor, { Size = UDim2.fromOffset(14, 14) }, 0.15, Enum.EasingStyle.Back)
             updateSV(pointerPosition())
         end
     end)
     hueBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if isPress(input) then
             dragTarget = "hue"
             tween(hueCursor, { Size = UDim2.fromOffset(20, 7) }, 0.15, Enum.EasingStyle.Back)
             updateHue(pointerPosition())
         end
     end)
-    table.insert(self.Window._connections, UserInputService.InputChanged:Connect(function(input)
-        if not dragTarget then
+    self.Window:_listen("Changed", function(input)
+        if not dragTarget or not isMove(input) then
             return
         end
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            local position = pointerPosition()
-            if dragTarget == "sv" then
-                updateSV(position)
-            else
-                updateHue(position)
-            end
+        local position = pointerPosition()
+        if dragTarget == "sv" then
+            updateSV(position)
+        else
+            updateHue(position)
         end
-    end))
-    table.insert(self.Window._connections, UserInputService.InputEnded:Connect(function(input)
-        if dragTarget and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+    end, self_)
+    self.Window:_listen("Ended", function(input)
+        if dragTarget and isPress(input) then
             dragTarget = nil
             tween(svCursor, { Size = UDim2.fromOffset(10, 10) }, 0.2)
             tween(hueCursor, { Size = UDim2.fromOffset(18, 5) }, 0.2)
         end
-    end))
+    end, self_)
 
     hexBox.Focused:Connect(function()
         tween(hexStroke, { Color = Theme.StrokeHover }, 0.15)
@@ -1785,27 +1834,17 @@ function Tab:ColorPicker(opts)
     end)
 
     render(0)
-    return registerFlag(opts, self_, self, "ColorPicker")
+    return finishElement(self, opts, self_, frame, "ColorPicker")
 end
 
 function Tab:Stepper(opts)
-    opts = normalize(opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default", Increment = "Step" })
+    local frame
+    opts, frame = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default", Increment = "Step" }, "Frame", 150, "Stepper")
     local min = opts.Min or 0
     local max = opts.Max or 100
     local step = opts.Step or 1
     local suffix = opts.Suffix or ""
-    local decimals = 0
-    do
-        local text = tostring(step)
-        local dot = text:find("%.")
-        if dot then
-            decimals = #text - dot
-        end
-    end
-    local height = opts.Desc and CARD_HEIGHT_DESC or CARD_HEIGHT
-    local frame, frameStroke = card(self, "Frame", height, opts)
-    hoverStroke(frame, frameStroke)
-    titleDesc(frame, opts.Name or "Stepper", opts.Desc, 150)
+    local numbers = numberFormat(min, max, step)
 
     local group = create("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
@@ -1869,12 +1908,9 @@ function Tab:Stepper(opts)
     end)
 
     local self_ = { Value = math.clamp(opts.Default or min, min, max) }
-    local function snap(value)
-        value = math.floor(value / step + 0.5) * step
-        return math.clamp(value, min, max)
-    end
+    local snap = numbers.snap
     local function render()
-        valueLabel.Text = string.format("%." .. decimals .. "f", self_.Value) .. suffix
+        valueLabel.Text = numbers.format(self_.Value) .. suffix
         tween(minus, { TextTransparency = self_.Value <= min and 0.6 or 0 }, 0.15)
         tween(plus, { TextTransparency = self_.Value >= max and 0.6 or 0 }, 0.15)
     end
@@ -1903,7 +1939,7 @@ function Tab:Stepper(opts)
     local function holdRepeat(button, direction)
         local holding = false
         button.InputBegan:Connect(function(input)
-            if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+            if not isPress(input) then
                 return
             end
             holding = true
@@ -1916,7 +1952,7 @@ function Tab:Stepper(opts)
             end)
         end)
         button.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if isPress(input) then
                 holding = false
             end
         end)
@@ -1929,7 +1965,7 @@ function Tab:Stepper(opts)
 
     render()
     task.defer(fitValue, true)
-    return registerFlag(opts, self_, self, "Stepper")
+    return finishElement(self, opts, self_, frame, "Stepper")
 end
 
 function Tab:Progress(opts)
@@ -2009,13 +2045,10 @@ function Tab:Progress(opts)
         fill.BackgroundColor3 = color
     end
     render(0)
-    self_._type = "Progress"
-    return self_
+    return finishElement(self, opts, self_, frame, "Progress")
 end
 
-Tab.CreateStepper = Tab.Stepper
-Tab.CreateProgress = Tab.Progress
-Tab.CreateProgressBar = Tab.Progress
+Tab.ProgressBar = Tab.Progress
 
 function Tab:ConfigManager(opts)
     opts = normalize(opts, {})
@@ -2101,19 +2134,18 @@ function Tab:ConfigManager(opts)
     return manager
 end
 
-Tab.CreateConfigManager = Tab.ConfigManager
 Tab.Colorpicker = Tab.ColorPicker
-Tab.CreateSection = Tab.Section
-Tab.CreateDivider = Tab.Divider
-Tab.CreateLabel = Tab.Label
-Tab.CreateParagraph = Tab.Paragraph
-Tab.CreateButton = Tab.Button
-Tab.CreateToggle = Tab.Toggle
-Tab.CreateSlider = Tab.Slider
-Tab.CreateDropdown = Tab.Dropdown
-Tab.CreateInput = Tab.Input
-Tab.CreateKeybind = Tab.Keybind
-Tab.CreateColorPicker = Tab.ColorPicker
+for name, method in pairs(table.clone(Tab)) do
+    if type(method) == "function" and name:sub(1, 1) ~= "_" and name:sub(1, 6) ~= "Create" then
+        Tab["Create" .. name] = method
+    end
+end
+
+local NOTIFY_COLORS = {
+    Success = Theme.Success,
+    Warning = Theme.Warning,
+    Error = Theme.Error,
+}
 
 local Window = {}
 Window.__index = Window
@@ -2133,8 +2165,19 @@ function Library:Window(opts)
         Keybind = keybind,
         _connections = {},
         _controls = {},
+        _inputListeners = { Began = {}, Changed = {}, Ended = {} },
         _destroyed = false,
     }, Window)
+    local function dispatch(kind)
+        return function(...)
+            for _, handler in ipairs(self._inputListeners[kind]) do
+                handler(...)
+            end
+        end
+    end
+    table.insert(self._connections, UserInputService.InputBegan:Connect(dispatch("Began")))
+    table.insert(self._connections, UserInputService.InputChanged:Connect(dispatch("Changed")))
+    table.insert(self._connections, UserInputService.InputEnded:Connect(dispatch("Ended")))
 
     local gui = create("ScreenGui", {
         Name = opts.Name or "AirflowUI",
@@ -2502,7 +2545,7 @@ function Window:_enableDrag()
     end
 
     table.insert(self._connections, UserInputService.InputBegan:Connect(function(input)
-        if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+        if not isPress(input) then
             return
         end
         if not self.Open or not self.Root.Visible then
@@ -2520,7 +2563,7 @@ function Window:_enableDrag()
         if not dragging then
             return
         end
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if isPress(input) then
             dragging = false
             target = nil
             self:_clampToScreen()
@@ -2846,7 +2889,7 @@ function Window:_createOpenButton(opts)
     local dragging, moved = false, false
     local grab = Vector2.zero
     pill.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if isPress(input) then
             dragging = true
             moved = false
             grab = pointerPosition() - pill.AbsolutePosition
@@ -2856,7 +2899,7 @@ function Window:_createOpenButton(opts)
         if not dragging then
             return
         end
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        if isMove(input) then
             local point = pointerPosition() - grab - gui.AbsolutePosition
             if (point - (pill.AbsolutePosition - gui.AbsolutePosition)).Magnitude > 3 then
                 moved = true
@@ -2869,7 +2912,7 @@ function Window:_createOpenButton(opts)
         end
     end))
     table.insert(self._connections, UserInputService.InputEnded:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+        if dragging and isPress(input) then
             dragging = false
             if not moved then
                 self:Toggle()
@@ -2908,7 +2951,7 @@ function Window:_enableResize(minSize)
     local targetSize = nil
 
     grip.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if isPress(input) then
             resizing = true
             initialSize = self.Root.Size
             initialPointer = pointerPosition()
@@ -2926,7 +2969,7 @@ function Window:_enableResize(minSize)
         end
     end)
     table.insert(self._connections, UserInputService.InputEnded:Connect(function(input)
-        if resizing and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+        if resizing and isPress(input) then
             resizing = false
             tween(gripImage, { ImageTransparency = 0.8 }, 0.17)
             if targetSize then
@@ -3003,7 +3046,7 @@ function Window:SaveConfig(name)
     ensureFolder(self.ConfigFolder)
     local data = {}
     for flag, element in pairs(Library.Flags) do
-        if element._type then
+        if element._type and type(element.Get) == "function" then
             data[flag] = serializeFlag(element)
         end
     end
@@ -3035,7 +3078,7 @@ function Window:LoadConfig(name, silent)
     self._autoSaveEnabled = false
     for flag, entry in pairs(data) do
         local element = Library.Flags[flag]
-        if element and type(entry) == "table" and entry.Type == element._type then
+        if element and type(element.Set) == "function" and type(entry) == "table" and entry.Type == element._type then
             pcall(deserializeFlag, element, entry, silent == true)
         end
     end
@@ -3478,6 +3521,24 @@ function Window:Confirm(opts)
     })
 end
 
+function Window:_listen(kind, handler, owner)
+    local list = self._inputListeners[kind]
+    table.insert(list, handler)
+    local function disconnect()
+        for index, entry in ipairs(list) do
+            if entry == handler then
+                table.remove(list, index)
+                break
+            end
+        end
+    end
+    if owner then
+        owner._listeners = owner._listeners or {}
+        table.insert(owner._listeners, disconnect)
+    end
+    return disconnect
+end
+
 function Window:_placeIndicator(tab)
     local indicator = self.Indicator
     local scale = self.Scale.Scale
@@ -3575,11 +3636,7 @@ end
 function Window:Notify(opts)
     opts = normalize(opts, { Text = "Content", Message = "Content", Image = "Icon" })
     local duration = opts.Duration or 4
-    local titleColor = ({
-        Success = Theme.Success,
-        Warning = Theme.Warning,
-        Error = Theme.Error,
-    })[opts.Type] or Theme.Text
+    local titleColor = NOTIFY_COLORS[opts.Type] or Theme.Text
 
     self._notifyOrder = self._notifyOrder + 1
     local outer = create("Frame", {
