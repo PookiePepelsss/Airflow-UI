@@ -24,6 +24,7 @@ local Window = Airflow:CreateWindow({
     MinSize = Vector2.new(480, 320),
     MaxSize = Vector2.new(1000, 700),
     MaxNotifications = 4,
+    KeepOnScreen = true,
     OpenButton = { Title = "Airflow", Icon = "wind" },
     Loading = {
         Enabled = true,
@@ -57,6 +58,7 @@ Drag any empty area to move it and the bottom-right grip to resize it. It scales
 | `MinSize` | Vector2 | `480 × 320` | Smallest size the resize grip allows. |
 | `MaxSize` | Vector2 | unlimited | Largest size the resize grip allows. |
 | `MaxNotifications` | number | `4` | Oldest toast is dismissed past this. |
+| `KeepOnScreen` | boolean | `true` | Nudge the window back inside the viewport after a drag, resize or screen change. `false` lets it sit partly off-screen. |
 | `OpenButton` | boolean \| table | touch-only devices | Floating pill that reopens the window. `true` / `false` to force, `{ Title, Icon }` to customise. |
 | `Loading` | boolean \| table | `true` | Loading card before the window morphs in. `false` skips it. |
 | `Loading.Title` | string | `Name` | Title on the card. |
@@ -75,6 +77,7 @@ Drag any empty area to move it and the bottom-right grip to resize it. It scales
 | `.Tabs` | Array of tabs. |
 | `Toggle(open?)` | Show, hide, or flip. |
 | `SetKeybind(keyCode)` | Change the hide key. Updates the footer chip. |
+| `SetKeepOnScreen(enabled)` | Turn the viewport clamp on or off. |
 | `SelectTab(tab)` | Switch tabs from code. |
 | `CreateTab(opts)` | See [Tab](#tab). |
 | `Notify(opts)` | See [Notification](#notification). |
