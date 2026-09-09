@@ -155,6 +155,10 @@ Tab:CreateDivider()
 local Label = Tab:CreateLabel({
     Text = "Players: 12",
     Color = Airflow.Theme.Muted,
+    UpdateRate = 1,
+    Update = function()
+        return "Players: " .. #game.Players:GetPlayers()
+    end,
 })
 
 local Label = Tab:CreateLabel("Players: 12")
@@ -168,12 +172,16 @@ Label:Set("Players: 13")
 | --- | --- | --- | --- |
 | `Text` | string | `""` | The line. A bare string works too. |
 | `Color` | Color3 | muted | Text colour. |
+| `Update` | function | — | Called on a timer; its return value becomes the text. |
+| `UpdateRate` | number | `1` | Seconds between `Update` calls. |
 
 ### Handle
 
 | Member | Description |
 | --- | --- |
 | `Set(text)` | Replace the line. |
+| `Get()` | The current text. |
+| `SetUpdateRate(seconds)` | Change the timer, when `Update` was given. |
 
 ---
 
