@@ -184,12 +184,24 @@ local CARD_HEIGHT_DESC = TOUCH and 70 or 64
 local DROPDOWN_OPTION_HEIGHT = TOUCH and 40 or 34
 local CHIP_HEIGHT = TOUCH and 34 or 28
 
+local tweenInfoCache = {}
+
 local function tween(object, props, duration, style, direction)
-    local info = TweenInfo.new(
-        duration or 0.2,
-        style or Enum.EasingStyle.Quart,
-        direction or Enum.EasingDirection.Out
-    )
+    duration = duration or 0.2
+    if duration <= 0 then
+        for key, value in pairs(props) do
+            object[key] = value
+        end
+        return nil
+    end
+    style = style or Enum.EasingStyle.Quart
+    direction = direction or Enum.EasingDirection.Out
+    local key = duration .. style.Name .. direction.Name
+    local info = tweenInfoCache[key]
+    if not info then
+        info = TweenInfo.new(duration, style, direction)
+        tweenInfoCache[key] = info
+    end
     local t = TweenService:Create(object, info, props)
     t:Play()
     return t
@@ -322,8 +334,14 @@ local function defaultParent()
     return LocalPlayer:WaitForChild("PlayerGui")
 end
 
+local insetFrame, insetValue = nil, Vector2.zero
 local function pointerPosition()
-    return UserInputService:GetMouseLocation() - GuiService:GetGuiInset()
+    local frame = time()
+    if insetFrame ~= frame then
+        insetFrame = frame
+        insetValue = GuiService:GetGuiInset()
+    end
+    return UserInputService:GetMouseLocation() - insetValue
 end
 
 local function isPress(input)
@@ -341,18 +359,6 @@ local function glowIcon(parent, icon, color, position)
         Size = UDim2.fromOffset(16, 16),
         BackgroundTransparency = 1,
         Parent = parent,
-    })
-    create("ImageLabel", {
-        Name = "iconglow",
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromScale(2, 2),
-        BackgroundTransparency = 1,
-        Image = Assets.Glow,
-        ImageColor3 = color,
-        ImageTransparency = 0.9,
-        ZIndex = 0,
-        Parent = holder,
     })
     local image = create("ImageLabel", {
         Size = UDim2.fromScale(1, 1),
@@ -626,11 +632,37 @@ function Tab:Label(opts)
         Parent = self.List,
     })
     padding(text_, 2)
-    return finishElement(self, opts, {
+    local handle = {
         Set = function(_, value)
-            text_.Text = value
+            text_.Text = tostring(value)
         end,
-    }, text_, "Label")
+        Get = function()
+            return text_.Text
+        end,
+    }
+    if type(opts.Update) == "function" then
+        local rate = math.max(tonumber(opts.UpdateRate) or 1, 0.05)
+        local running = true
+        handle._listeners = handle._listeners or {}
+        table.insert(handle._listeners, function()
+            running = false
+        end)
+        task.spawn(function()
+            while running and text_.Parent do
+                local ok, value = pcall(opts.Update)
+                if ok and value ~= nil then
+                    text_.Text = tostring(value)
+                elseif not ok then
+                    warn("[AirflowUI] label update error: " .. tostring(value))
+                end
+                task.wait(rate)
+            end
+        end)
+        function handle:SetUpdateRate(seconds)
+            rate = math.max(tonumber(seconds) or rate, 0.05)
+        end
+    end
+    return finishElement(self, opts, handle, text_, "Label")
 end
 
 function Tab:Paragraph(opts)
@@ -1288,32 +1320,62 @@ function Tab:Dropdown(opts)
         tween(searchBox, { TextTransparency = open and 0 or 1 }, 0.2)
         arrow:Set(open)
         tween(chipStroke, { Color = open and Theme.StrokeHover or Theme.Stroke }, 0.2)
-        local index = 0
-        for _, option in ipairs(options) do
-            local button = optionButtons[option]
-            if button and button.Frame.Visible then
-                index = index + 1
-                local function show()
-                    button.Dot.BackgroundTransparency = open and 0 or 1
-                    tween(button.Label, { TextTransparency = open and 0 or 1 }, 0.18)
-                    tween(button.Stroke, { Transparency = open and 0 or 1 }, 0.18)
-                    tween(button.Frame, { BackgroundTransparency = open and 0 or 1 }, 0.18)
+        local function show(button)
+            if not button.Stroke then
+                button.Stroke = stroke(button.Frame, Theme.Stroke, 1)
+            end
+            button.Dot.BackgroundTransparency = open and 0 or 1
+            tween(button.Label, { TextTransparency = open and 0 or 1 }, 0.18)
+            tween(button.Stroke, { Transparency = open and 0 or 1 }, 0.18)
+            tween(button.Frame, { BackgroundTransparency = open and 0 or 1 }, 0.18)
+        end
+        if open then
+            local generation = (self_._openGeneration or 0) + 1
+            self_._openGeneration = generation
+            task.spawn(function()
+                local first = true
+                for _, option in ipairs(options) do
+                    local button = optionButtons[option]
+                    if button and button.Frame.Visible then
+                        if not first then
+                            task.wait(0.025)
+                            if self_._openGeneration ~= generation or not self_.Open then
+                                return
+                            end
+                        end
+                        first = false
+                        show(button)
+                    end
                 end
-                if open and index > 1 then
-                    task.delay((index - 1) * 0.025, show)
-                else
-                    show()
+            end)
+        else
+            self_._openGeneration = (self_._openGeneration or 0) + 1
+            for _, option in ipairs(options) do
+                local button = optionButtons[option]
+                if button and button.Frame.Visible then
+                    show(button)
                 end
             end
         end
     end
 
     local function buildOptions()
-        for _, button in pairs(optionButtons) do
-            button.Frame:Destroy()
-        end
-        optionButtons = {}
+        local keep = {}
         for index, option in ipairs(options) do
+            keep[option] = index
+        end
+        for option, button in pairs(optionButtons) do
+            if not keep[option] then
+                button.Frame:Destroy()
+                optionButtons[option] = nil
+            end
+        end
+        for index, option in ipairs(options) do
+            local existing = optionButtons[option]
+            if existing then
+                existing.Frame.LayoutOrder = index
+                continue
+            end
             local button = create("TextButton", {
                 Size = UDim2.new(1, 0, 0, DROPDOWN_OPTION_HEIGHT),
                 BackgroundColor3 = Theme.Surface,
@@ -1324,7 +1386,6 @@ function Tab:Dropdown(opts)
                 Parent = listHolder,
             })
             corner(button, UDim.new(0, 6))
-            local optionStroke = stroke(button, Theme.Stroke, 1)
             local dot = create("Frame", {
                 AnchorPoint = Vector2.new(0, 0.5),
                 Position = UDim2.new(0, 10, 0.5, 0),
@@ -1346,11 +1407,17 @@ function Tab:Dropdown(opts)
             })
             button.MouseEnter:Connect(function()
                 tween(text_, { Position = UDim2.fromOffset(27, -1), TextColor3 = Theme.Text }, 0.15)
-                tween(optionStroke, { Color = Theme.StrokeHover }, 0.12)
+                local entry = optionButtons[option]
+                if entry and entry.Stroke then
+                    tween(entry.Stroke, { Color = Theme.StrokeHover }, 0.12)
+                end
             end)
             button.MouseLeave:Connect(function()
                 tween(text_, { Position = UDim2.fromOffset(24, -1), TextColor3 = selected[option] and Theme.Text or Theme.Muted }, 0.2)
-                tween(optionStroke, { Color = Theme.Stroke }, 0.2)
+                local entry = optionButtons[option]
+                if entry and entry.Stroke then
+                    tween(entry.Stroke, { Color = Theme.Stroke }, 0.2)
+                end
             end)
             button.MouseButton1Click:Connect(function()
                 if selected[option] then
@@ -1367,7 +1434,7 @@ function Tab:Dropdown(opts)
                     setOpen(false)
                 end
             end)
-            optionButtons[option] = { Frame = button, Label = text_, Dot = dot, Stroke = optionStroke, On = nil }
+            optionButtons[option] = { Frame = button, Label = text_, Dot = dot, Stroke = nil, On = nil }
         end
         applyFilter()
         if self_.Open then
@@ -1605,11 +1672,11 @@ function Tab:ColorPicker(opts)
     stroke(swatch, Theme.Stroke)
     local arrow = arrowIndicator(header, 1, -12)
 
-    local panel = create("CanvasGroup", {
+    local panel = create("Frame", {
         Position = UDim2.fromOffset(14, height + 2),
         Size = UDim2.new(1, -28, 0, PANEL_HEIGHT - 12),
         BackgroundTransparency = 1,
-        GroupTransparency = 1,
+        Visible = false,
         Parent = frame,
     })
 
@@ -1766,7 +1833,15 @@ function Tab:ColorPicker(opts)
         self_.Open = open
         tween(frame, { Size = UDim2.new(1, 0, 0, open and (height + PANEL_HEIGHT) or height) }, 0.35, Enum.EasingStyle.Quint)
         arrow:Set(open)
-        tween(panel, { GroupTransparency = open and 0 or 1 }, open and 0.3 or 0.15)
+        if open then
+            panel.Visible = true
+        else
+            task.delay(0.35, function()
+                if not self_.Open then
+                    panel.Visible = false
+                end
+            end)
+        end
     end
 
     function self_:SetOpen(open)
@@ -3257,18 +3332,20 @@ function Window:Tab(opts, icon)
         TextXAlignment = Enum.TextXAlignment.Center,
         Parent = empty,
     })
-    local function refreshEmpty()
-        local count = 0
-        for _, child in ipairs(list:GetChildren()) do
-            if child:IsA("GuiObject") then
-                count += 1
-            end
+    local elementCount = 0
+    list.ChildAdded:Connect(function(child)
+        if child:IsA("GuiObject") then
+            elementCount += 1
+            empty.Visible = false
         end
-        empty.Visible = count == 0
-    end
-    list.ChildAdded:Connect(refreshEmpty)
-    list.ChildRemoved:Connect(refreshEmpty)
-    refreshEmpty()
+    end)
+    list.ChildRemoved:Connect(function(child)
+        if child:IsA("GuiObject") then
+            elementCount -= 1
+            empty.Visible = elementCount <= 0
+        end
+    end)
+    empty.Visible = true
 
     local labelX = hasIcon and 36 or 14
     button.MouseEnter:Connect(function()
@@ -3992,30 +4069,35 @@ local Info = Window:CreateTab({ Name = "Info", Desc = "Session", Icon = "activit
 
 Info:CreateSection("Session")
 
-local PlayersLabel = Info:CreateLabel("Players: " .. #Players:GetPlayers())
-local FpsLabel = Info:CreateLabel("FPS: 0")
-local PingLabel = Info:CreateLabel("Ping: 0 ms")
+Info:CreateLabel({
+    Text = "Players: 0",
+    UpdateRate = 2, -- seconds between refreshes
+    Update = function()
+        return "Players: " .. #Players:GetPlayers()
+    end,
+})
 
-Players.PlayerAdded:Connect(function()
-    PlayersLabel:Set("Players: " .. #Players:GetPlayers())
-end)
-Players.PlayerRemoving:Connect(function()
-    PlayersLabel:Set("Players: " .. (#Players:GetPlayers() - 1))
-end)
-
-local Frames, Elapsed = 0, 0
-RunService.RenderStepped:Connect(function(Delta)
+local Frames = 0
+RunService.RenderStepped:Connect(function()
     Frames += 1
-    Elapsed += Delta
-    if Elapsed >= 1 then
-        FpsLabel:Set("FPS: " .. Frames)
-        local Ok, Ping = pcall(function()
-            return math.floor(LocalPlayer:GetNetworkPing() * 1000)
-        end)
-        PingLabel:Set("Ping: " .. (Ok and Ping or 0) .. " ms")
-        Frames, Elapsed = 0, 0
-    end
 end)
+Info:CreateLabel({
+    Text = "FPS: 0",
+    UpdateRate = 1,
+    Update = function()
+        local Count = Frames
+        Frames = 0
+        return "FPS: " .. Count
+    end,
+})
+
+Info:CreateLabel({
+    Text = "Ping: 0 ms",
+    UpdateRate = 1,
+    Update = function()
+        return "Ping: " .. math.floor(LocalPlayer:GetNetworkPing() * 1000) .. " ms"
+    end,
+})
 
 Window:CreateTab({ Name = "Empty", Desc = "Nothing in here", Icon = "package" })
 
