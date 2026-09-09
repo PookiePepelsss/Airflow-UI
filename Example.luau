@@ -1210,6 +1210,30 @@ function Tab:Dropdown(opts)
         Parent = chip,
     })
     local arrow = arrowIndicator(chip, 1, -6)
+    local measure = label({
+        Size = UDim2.fromOffset(0, CHIP_HEIGHT),
+        AutomaticSize = Enum.AutomaticSize.X,
+        TextSize = 13,
+        Visible = false,
+        Parent = chip,
+    })
+    local fullText = ""
+    local function trimmed()
+        local maxText = 190 - 10 - 34
+        measure.Text = fullText
+        if measure.TextBounds.X <= maxText then
+            return fullText
+        end
+        local text = fullText
+        while #text > 1 do
+            text = text:sub(1, -2)
+            measure.Text = text .. ".."
+            if measure.TextBounds.X <= maxText then
+                return text .. ".."
+            end
+        end
+        return ".."
+    end
     local function fitChip(instant)
         local width = math.clamp(valueLabel.TextBounds.X + 10 + 34, 60, 190)
         reserveRight(titleLabel, descLabel, width + 20)
@@ -1301,19 +1325,20 @@ function Tab:Dropdown(opts)
     local function renderValueLabel()
         local value = currentValue()
         if multi then
-            valueLabel.Text = #value > 0 and table.concat(value, ", ") or "None"
+            fullText = #value > 0 and table.concat(value, ", ") or "None"
         else
-            valueLabel.Text = value ~= nil and tostring(value) or "None"
+            fullText = value ~= nil and tostring(value) or "None"
         end
+        valueLabel.Text = trimmed()
         for option, button in pairs(optionButtons) do
             local on = selected[option] == true
             if button.On ~= on then
                 button.On = on
                 tween(button.Label, { TextColor3 = on and Theme.Text or Theme.Muted }, 0.15)
-                tween(button.Dot, {
-                    BackgroundColor3 = on and Theme.Accent or Theme.Surface3,
-                    Size = on and UDim2.fromOffset(8, 8) or UDim2.fromOffset(6, 6),
-                }, 0.2, Enum.EasingStyle.Back)
+                if self_.Open then
+                    tween(button.Check, { ImageTransparency = on and 0 or 1 }, 0.15)
+                    tween(button.CheckScale, { Scale = on and 1 or 0.6 }, on and 0.3 or 0.15, on and Enum.EasingStyle.Back or Enum.EasingStyle.Quint)
+                end
             end
         end
     end
@@ -1357,7 +1382,9 @@ function Tab:Dropdown(opts)
             if not button.Stroke then
                 button.Stroke = stroke(button.Frame, Theme.Stroke, 1)
             end
-            button.Dot.BackgroundTransparency = open and 0 or 1
+            local on = open and button.On
+            tween(button.Check, { ImageTransparency = on and 0 or 1 }, 0.18)
+            button.CheckScale.Scale = on and 1 or 0.6
             tween(button.Label, { TextTransparency = open and 0 or 1 }, 0.18)
             tween(button.Stroke, { Transparency = open and 0 or 1 }, 0.18)
             tween(button.Frame, { BackgroundTransparency = open and 0 or 1 }, 0.18)
@@ -1432,19 +1459,21 @@ function Tab:Dropdown(opts)
                 Parent = listHolder,
             })
             corner(button, UDim.new(0, 6))
-            local dot = create("Frame", {
-                AnchorPoint = Vector2.new(0, 0.5),
-                Position = UDim2.new(0, 10, 0.5, 0),
-                Size = UDim2.fromOffset(6, 6),
-                BackgroundColor3 = Theme.Surface3,
+            local check = create("ImageLabel", {
+                AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.new(1, -10, 0.5, 0),
+                Size = UDim2.fromOffset(14, 14),
                 BackgroundTransparency = 1,
-                BorderSizePixel = 0,
+                ImageColor3 = Theme.Accent,
+                ImageTransparency = 1,
+                ScaleType = Enum.ScaleType.Fit,
                 Parent = button,
             })
-            corner(dot, UDim.new(1, 0))
+            applyIcon(check, "check")
+            local checkScale = create("UIScale", { Scale = 0.6, Parent = check })
             local text_ = label({
-                Position = UDim2.fromOffset(24, -1),
-                Size = UDim2.new(1, -30, 1, 0),
+                Position = UDim2.fromOffset(12, -1),
+                Size = UDim2.new(1, -36, 1, 0),
                 Text = tostring(option),
                 TextSize = 13,
                 TextColor3 = Theme.Muted,
@@ -1452,14 +1481,14 @@ function Tab:Dropdown(opts)
                 Parent = button,
             })
             button.MouseEnter:Connect(function()
-                tween(text_, { Position = UDim2.fromOffset(27, -1), TextColor3 = Theme.Text }, 0.15)
+                tween(text_, { TextColor3 = Theme.Text }, 0.15)
                 local entry = optionButtons[option]
                 if entry and entry.Stroke then
                     tween(entry.Stroke, { Color = Theme.StrokeHover }, 0.12)
                 end
             end)
             button.MouseLeave:Connect(function()
-                tween(text_, { Position = UDim2.fromOffset(24, -1), TextColor3 = selected[option] and Theme.Text or Theme.Muted }, 0.2)
+                tween(text_, { TextColor3 = selected[option] and Theme.Text or Theme.Muted }, 0.2)
                 local entry = optionButtons[option]
                 if entry and entry.Stroke then
                     tween(entry.Stroke, { Color = Theme.Stroke }, 0.2)
@@ -1480,7 +1509,7 @@ function Tab:Dropdown(opts)
                     setOpen(false)
                 end
             end)
-            optionButtons[option] = { Frame = button, Label = text_, Dot = dot, Stroke = nil, On = nil }
+            optionButtons[option] = { Frame = button, Label = text_, Check = check, CheckScale = checkScale, Stroke = nil, On = nil }
         end
         applyFilter()
         if self_.Open then
@@ -2308,6 +2337,20 @@ Window.__index = Window
 
 function Library.Window(_, opts)
     opts = normalize(opts, { Name = "Title", LoadingSubtitle = "Subtitle", ToggleUIKeybind = "Keybind" })
+    if type(opts.KeySystem) == "table" then
+        local keyOpts = normalize(opts.KeySystem, {})
+        keyOpts.Title = keyOpts.Title or opts.Title
+        keyOpts.Icon = keyOpts.Icon or opts.Icon
+        keyOpts.Parent = keyOpts.Parent or opts.Parent
+        if not keyOpts.FolderName and type(opts.ConfigurationSaving) == "table" then
+            keyOpts.FolderName = opts.ConfigurationSaving.FolderName
+        end
+        local passed = Library:KeySystem(keyOpts)
+        if not passed then
+            return nil
+        end
+        task.wait(0.3)
+    end
     if type(opts.Keybind) == "string" then
         opts.Keybind = Enum.KeyCode[opts.Keybind]
     end
@@ -2667,6 +2710,672 @@ function Library.Window(_, opts)
 end
 
 Library.CreateWindow = Library.Window
+
+local function keyFilePath(folder)
+    return folder .. "/key.txt"
+end
+
+local function readSavedKey(folder)
+    if type(readfile) ~= "function" or type(isfile) ~= "function" then
+        return nil
+    end
+    local ok, key = pcall(function()
+        local path = keyFilePath(folder)
+        if isfile(path) then
+            return readfile(path)
+        end
+    end)
+    if ok and type(key) == "string" and #key > 0 then
+        return key
+    end
+    return nil
+end
+
+local function writeSavedKey(folder, key)
+    if type(writefile) ~= "function" then
+        return
+    end
+    pcall(function()
+        if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder(folder) then
+            makefolder(folder)
+        end
+        writefile(keyFilePath(folder), key)
+    end)
+end
+
+local function openLink(url)
+    local opened = false
+    pcall(function()
+        GuiService:OpenBrowserWindow(url)
+        opened = true
+    end)
+    if not opened then
+        pcall(function()
+            game:GetService("BrowserService"):OpenBrowserWindow(url)
+            opened = true
+        end)
+    end
+    return opened
+end
+
+local function detectGameName()
+    local ok, info = pcall(function()
+        return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+    end)
+    if ok and type(info) == "table" and info.Name then
+        return info.Name
+    end
+    return "Unknown game"
+end
+
+local function detectExecutor()
+    local ok, name = pcall(function()
+        if typeof(identifyexecutor) == "function" then
+            return (identifyexecutor())
+        end
+        if typeof(getexecutorname) == "function" then
+            return getexecutorname()
+        end
+    end)
+    if ok and type(name) == "string" and #name > 0 then
+        return name
+    end
+    return RunService:IsStudio() and "Studio" or "Unknown"
+end
+
+local KEY_MESSAGES = {
+    KEY_VALID = "Unlocked",
+    KEY_EXPIRED = "Key expired",
+    KEY_BANNED = "Key banned",
+    KEY_HWID_LOCKED = "HWID locked",
+    KEY_INCORRECT = "Wrong key",
+    KEY_INVALID = "Wrong key",
+    VALID = "Unlocked",
+    INVALID = "Wrong key",
+    EXPIRED = "Key expired",
+    HWID_MISMATCH = "HWID locked",
+    BLACKLISTED = "Key banned",
+}
+
+local function setScriptKey(key)
+    pcall(function()
+        if typeof(getgenv) == "function" then
+            getgenv().script_key = key
+        end
+        rawset(_G, "script_key", key)
+    end)
+end
+
+local function shortMessage(code, message)
+    if KEY_MESSAGES[code] then
+        return KEY_MESSAGES[code]
+    end
+    if type(message) == "string" and #message > 0 and #message <= 18 then
+        return message
+    end
+    return "Wrong key"
+end
+
+local Providers = {}
+
+function Providers.Luarmor(opts)
+    local api
+    local function ensure()
+        if api then
+            return api
+        end
+        local ok, result = pcall(function()
+            return loadstring(game:HttpGet("https://sdkapi-public.luarmor.net/library.lua"))()
+        end)
+        if ok and type(result) == "table" then
+            result.script_id = opts.ScriptId
+            api = result
+        end
+        return api
+    end
+    return {
+        check = function(key)
+            local lib = ensure()
+            if not lib then
+                return false, "Luarmor unavailable"
+            end
+            local ok, status = pcall(lib.check_key, key)
+            if not ok or type(status) ~= "table" then
+                return false, "Check failed"
+            end
+            if status.code == "KEY_VALID" then
+                return true, "Unlocked", status.data
+            end
+            return false, shortMessage(status.code, status.message)
+        end,
+        load = function(key)
+            local lib = ensure()
+            setScriptKey(key)
+            if lib and opts.LoadScript then
+                task.spawn(function()
+                    pcall(lib.load_script)
+                end)
+            end
+        end,
+    }
+end
+
+function Providers.LuaProt(opts)
+    local sdk
+    local function ensure()
+        if sdk then
+            return sdk
+        end
+        local ok, result = pcall(function()
+            return loadstring(game:HttpGet("https://sdk.luaprot.net/"))()
+        end)
+        if ok and type(result) == "table" then
+            result.scriptId = opts.ScriptId
+            sdk = result
+        end
+        return sdk
+    end
+    return {
+        check = function(key)
+            local lib = ensure()
+            if not lib then
+                return false, "LuaProt unavailable"
+            end
+            local ok, result = pcall(lib.checkKey, lib, key)
+            if not ok or type(result) ~= "table" then
+                return false, "Check failed"
+            end
+            if result.status == "VALID" then
+                return true, "Unlocked", result.data
+            end
+            return false, shortMessage(result.status, result.message)
+        end,
+        load = function(key)
+            local lib = ensure()
+            setScriptKey(key)
+            if lib and opts.LoadScript then
+                task.spawn(function()
+                    pcall(function()
+                        lib:loadScript(key)
+                    end)
+                end)
+            end
+        end,
+    }
+end
+
+function Library.KeySystem(_, opts)
+    opts = normalize(opts, { Name = "Title", Text = "Note", Message = "Note", KeyURL = "GetKeyURL", Link = "GetKeyURL" })
+    local folder = opts.FolderName or "AirflowUI"
+    local keys = {}
+    if type(opts.Key) == "string" then
+        table.insert(keys, opts.Key)
+    end
+    if type(opts.Keys) == "table" then
+        for _, key in ipairs(opts.Keys) do
+            table.insert(keys, key)
+        end
+    end
+    local provider
+    if type(opts.Provider) == "string" and Providers[opts.Provider] then
+        provider = Providers[opts.Provider](opts)
+    end
+    local function validate(key)
+        if provider then
+            local ok, message, data = provider.check(key)
+            return ok, message, data
+        end
+        if type(opts.Validate) == "function" then
+            local ok, result, message = pcall(opts.Validate, key)
+            if ok and result == true then
+                return true, "Unlocked"
+            end
+            return false, type(message) == "string" and message or (type(result) == "string" and result) or "Wrong key"
+        end
+        for _, allowed in ipairs(keys) do
+            if key == allowed then
+                return true, "Unlocked"
+            end
+        end
+        return false, "Wrong key"
+    end
+
+    if opts.Save ~= false then
+        local saved = readSavedKey(folder)
+        if saved and validate(saved) then
+            if provider then
+                provider.load(saved)
+            end
+            safeCall(opts.Callback, saved)
+            return true, saved
+        end
+    end
+
+    local gui = create("ScreenGui", {
+        Name = (opts.Title or "Airflow") .. "Key",
+        IgnoreGuiInset = true,
+        ResetOnSpawn = false,
+        DisplayOrder = 1000,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    })
+    pcall(function()
+        if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+            syn.protect_gui(gui)
+        end
+    end)
+
+    local WIDTH, HEIGHT = 420, 360
+    local PAD = 28
+    local root = create("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 20),
+        Size = UDim2.fromOffset(WIDTH, HEIGHT),
+        BackgroundTransparency = 1,
+        Parent = gui,
+    })
+    local scale = create("UIScale", { Scale = 0.92, Parent = root })
+    local shadow = create("ImageLabel", {
+        Position = UDim2.fromOffset(-25, -25),
+        Size = UDim2.new(1, 50, 1, 50),
+        BackgroundTransparency = 1,
+        Image = Assets.Shadow,
+        ImageColor3 = Color3.new(0, 0, 0),
+        ImageTransparency = 1,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(49, 49, 450, 450),
+        Parent = root,
+    })
+    local body = create("CanvasGroup", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = Theme.Background,
+        BorderSizePixel = 0,
+        GroupTransparency = 1,
+        Parent = root,
+    })
+    corner(body, UDim.new(0, 12))
+    local bodyStroke = stroke(body, Theme.Stroke, 1)
+    edgeHighlight(body)
+    glow(body, UDim2.fromOffset(420, 200), UDim2.new(0.5, 0, 0, -40), 0.84, 90)
+
+    local closeButton = create("TextButton", {
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -12, 0, 12),
+        Size = UDim2.fromOffset(30, 30),
+        BackgroundColor3 = Theme.Surface2,
+        BackgroundTransparency = 1,
+        Text = "×",
+        TextColor3 = Theme.Muted,
+        TextSize = 24,
+        FontFace = Fonts.Medium,
+        AutoButtonColor = false,
+        ZIndex = 5,
+        Parent = body,
+    })
+    padding(closeButton, 0, 0, 1, 0)
+    corner(closeButton, UDim.new(0, 8))
+    closeButton.MouseEnter:Connect(function()
+        tween(closeButton, { BackgroundTransparency = 0, TextColor3 = Theme.Text }, 0.15)
+    end)
+    closeButton.MouseLeave:Connect(function()
+        tween(closeButton, { BackgroundTransparency = 1, TextColor3 = Theme.Muted }, 0.2)
+    end)
+
+    local logo = create("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, 30),
+        Size = UDim2.fromOffset(44, 40),
+        BackgroundTransparency = 1,
+        ImageColor3 = Theme.Accent,
+        ScaleType = Enum.ScaleType.Fit,
+        Parent = body,
+    })
+    applyIcon(logo, opts.Icon or Assets.Logo)
+    label({
+        Position = UDim2.fromOffset(PAD, 80),
+        Size = UDim2.new(1, -PAD * 2, 0, 26),
+        Text = opts.Title or "Airflow",
+        TextSize = 22,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        Parent = body,
+    })
+    label({
+        Position = UDim2.fromOffset(PAD, 106),
+        Size = UDim2.new(1, -PAD * 2, 0, 16),
+        Text = opts.Subtitle or "Enter your key to continue",
+        TextSize = 13,
+        FontFace = Fonts.Regular,
+        TextColor3 = Theme.Muted,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        Parent = body,
+    })
+
+    local infoRow = create("Frame", {
+        Position = UDim2.fromOffset(PAD, 136),
+        Size = UDim2.new(1, -PAD * 2, 0, 24),
+        BackgroundTransparency = 1,
+        Parent = body,
+    })
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 6),
+        Parent = infoRow,
+    })
+    local function infoChip(icon, text, order)
+        local chip = create("Frame", {
+            Size = UDim2.fromOffset(0, 24),
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundColor3 = Theme.Surface,
+            BorderSizePixel = 0,
+            LayoutOrder = order,
+            Parent = infoRow,
+        })
+        corner(chip, UDim.new(0, 6))
+        local chipStroke = stroke(chip)
+        padding(chip, 8, 9)
+        local image = create("ImageLabel", {
+            AnchorPoint = Vector2.new(0, 0.5),
+            Position = UDim2.new(0, 0, 0.5, 0),
+            Size = UDim2.fromOffset(12, 12),
+            BackgroundTransparency = 1,
+            ImageColor3 = Theme.Muted,
+            ScaleType = Enum.ScaleType.Fit,
+            Parent = chip,
+        })
+        applyIcon(image, icon)
+        local text_ = label({
+            Position = UDim2.fromOffset(17, 0),
+            Size = UDim2.new(0, 0, 1, 0),
+            AutomaticSize = Enum.AutomaticSize.X,
+            Text = text,
+            TextSize = 12,
+            TextColor3 = Theme.Muted,
+            TextTruncate = Enum.TextTruncate.None,
+            Parent = chip,
+        })
+        create("UISizeConstraint", { MaxSize = Vector2.new(170, 24), Parent = text_ })
+        return text_, image, chipStroke
+    end
+    local gameName = infoChip("gamepad-2", "Detecting game", 1)
+    infoChip("cpu", detectExecutor(), 2)
+    task.spawn(function()
+        gameName.Text = detectGameName()
+    end)
+
+    local boxHolder = create("Frame", {
+        Position = UDim2.fromOffset(PAD, 180),
+        Size = UDim2.new(1, -PAD * 2, 0, 44),
+        BackgroundColor3 = Theme.Surface,
+        BorderSizePixel = 0,
+        Parent = body,
+    })
+    corner(boxHolder)
+    local boxStroke = stroke(boxHolder)
+    glowIcon(boxHolder, "key-round", Theme.Muted, UDim2.new(0, 14, 0.5, 0))
+    local box = create("TextBox", {
+        Position = UDim2.fromOffset(42, 0),
+        Size = UDim2.new(1, -54, 1, 0),
+        BackgroundTransparency = 1,
+        Text = "",
+        PlaceholderText = opts.Placeholder or "Paste your key",
+        PlaceholderColor3 = Theme.Muted,
+        TextColor3 = Theme.Text,
+        TextSize = 14,
+        FontFace = Fonts.Regular,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ClearTextOnFocus = false,
+        Parent = boxHolder,
+    })
+    box.Focused:Connect(function()
+        tween(boxStroke, { Color = Theme.StrokeHover }, 0.15)
+    end)
+    box.FocusLost:Connect(function()
+        tween(boxStroke, { Color = Theme.Stroke }, 0.15)
+    end)
+
+    local submit = create("TextButton", {
+        Position = UDim2.fromOffset(PAD, 234),
+        Size = UDim2.new(1, -PAD * 2, 0, 42),
+        BackgroundColor3 = Theme.Accent,
+        BackgroundTransparency = 0.12,
+        Text = "",
+        AutoButtonColor = false,
+        ClipsDescendants = true,
+        Parent = body,
+    })
+    corner(submit)
+    local submitStroke = stroke(submit, Theme.Accent, 0.4)
+    local submitLabel = label({
+        Size = UDim2.new(1, 0, 1, 0),
+        Text = opts.UnlockText or "Unlock",
+        TextSize = 14,
+        TextColor3 = Theme.AccentDark,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        Parent = submit,
+    })
+    submit.MouseEnter:Connect(function()
+        tween(submit, { BackgroundTransparency = 0 }, 0.12)
+        tween(submitStroke, { Transparency = 0 }, 0.12)
+    end)
+    submit.MouseLeave:Connect(function()
+        tween(submit, { BackgroundTransparency = 0.12 }, 0.2)
+        tween(submitStroke, { Transparency = 0.4 }, 0.2)
+    end)
+
+    local linkRow = create("Frame", {
+        Position = UDim2.new(0, PAD, 1, -66),
+        Size = UDim2.new(1, -PAD * 2, 0, 30),
+        BackgroundTransparency = 1,
+        Parent = body,
+    })
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 8),
+        Parent = linkRow,
+    })
+    local function linkButton(icon, text, order, spec)
+        local button = create("TextButton", {
+            Size = UDim2.fromOffset(100, 30),
+            BackgroundColor3 = Theme.Surface2,
+            BorderSizePixel = 0,
+            Text = "",
+            AutoButtonColor = false,
+            LayoutOrder = order,
+            Parent = linkRow,
+        })
+        corner(button, UDim.new(0, 7))
+        local buttonStroke = stroke(button)
+        local image = create("ImageLabel", {
+            AnchorPoint = Vector2.new(0, 0.5),
+            Position = UDim2.new(0, 10, 0.5, 0),
+            Size = UDim2.fromOffset(13, 13),
+            BackgroundTransparency = 1,
+            ImageColor3 = Theme.Accent,
+            ScaleType = Enum.ScaleType.Fit,
+            Parent = button,
+        })
+        applyIcon(image, icon)
+        local text_ = label({
+            Position = UDim2.fromOffset(29, 0),
+            Size = UDim2.new(1, -39, 1, 0),
+            Text = text,
+            TextSize = 13,
+            TextTruncate = Enum.TextTruncate.None,
+            Parent = button,
+        })
+        task.defer(function()
+            button.Size = UDim2.fromOffset(math.max(text_.TextBounds.X, 52) + 29 + 12, 30)
+        end)
+        hoverStroke(button, buttonStroke)
+        local busyLink = false
+        button.MouseButton1Click:Connect(function()
+            if busyLink then
+                return
+            end
+            busyLink = true
+            local feedback = "Copied"
+            if spec.Open and openLink(spec.Open) then
+                feedback = "Opened"
+            elseif spec.Copy and typeof(setclipboard) == "function" then
+                setclipboard(spec.Copy)
+            elseif spec.Open and typeof(setclipboard) == "function" then
+                setclipboard(spec.Open)
+            end
+            safeCall(spec.Callback)
+            text_.Text = feedback
+            task.delay(1, function()
+                text_.Text = text
+                busyLink = false
+            end)
+        end)
+        return button
+    end
+    local function linkSpec(value)
+        if type(value) == "table" then
+            return { Copy = value.Copy, Open = value.Open or value.URL, Callback = value.Callback }
+        end
+        return { Copy = value, Open = value }
+    end
+    if opts.GetKeyURL or opts.OnGetKey then
+        local spec = linkSpec(opts.GetKeyURL or {})
+        spec.Callback = opts.OnGetKey
+        linkButton("external-link", opts.GetKeyText or "Get a key", 1, spec)
+    end
+    if opts.Discord then
+        linkButton("message-circle", opts.DiscordText or "Discord", 2, linkSpec(opts.Discord))
+    end
+    if opts.Website then
+        linkButton("globe", opts.WebsiteText or "Website", 3, linkSpec(opts.Website))
+    end
+    if type(opts.Buttons) == "table" then
+        for index, extra in ipairs(opts.Buttons) do
+            linkButton(extra.Icon or "link", extra.Text or extra.Title or "Link", 3 + index, {
+                Copy = extra.Copy,
+                Open = extra.Open or extra.URL,
+                Callback = extra.Callback,
+            })
+        end
+    end
+    label({
+        Position = UDim2.new(0, PAD, 1, -26),
+        Size = UDim2.new(1, -PAD * 2, 0, 14),
+        Text = opts.Note or (opts.Save ~= false and "Correct keys are remembered on this device" or ""),
+        TextSize = 12,
+        FontFace = Fonts.Regular,
+        TextColor3 = Theme.Muted,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        Parent = body,
+    })
+
+    local result = nil
+    local acceptedKey = nil
+    local busy = false
+
+    local unlockText = opts.UnlockText or "Unlock"
+
+    local function shake()
+        local origin = root.Position
+        local offsets = { 8, -7, 5, -3, 0 }
+        task.spawn(function()
+            for _, dx in ipairs(offsets) do
+                tween(root, { Position = origin + UDim2.fromOffset(dx, 0) }, 0.05, Enum.EasingStyle.Sine)
+                task.wait(0.05)
+            end
+        end)
+    end
+
+    local function close()
+        tween(scale, { Scale = 0.94 }, 0.25, Enum.EasingStyle.Quint)
+        tween(body, { GroupTransparency = 1 }, 0.22)
+        tween(bodyStroke, { Transparency = 1 }, 0.15)
+        tween(shadow, { ImageTransparency = 1 }, 0.2)
+        task.delay(0.26, function()
+            gui:Destroy()
+        end)
+    end
+
+    local function attempt()
+        if busy then
+            return
+        end
+        local key = box.Text:gsub("^%s+", ""):gsub("%s+$", "")
+        if #key == 0 then
+            shake()
+            return
+        end
+        busy = true
+        submitLabel.Text = opts.CheckingText or "Checking"
+        task.wait(0.35)
+        local ok, message = validate(key)
+        if ok then
+            submitLabel.Text = opts.UnlockedText or "Unlocked"
+            tween(boxStroke, { Color = Theme.Success }, 0.2)
+            if opts.Save ~= false then
+                writeSavedKey(folder, key)
+            end
+            acceptedKey = key
+            result = true
+            if provider then
+                provider.load(key)
+            end
+            task.delay(0.6, close)
+        else
+            submitLabel.Text = message or "Wrong key"
+            tween(boxStroke, { Color = Theme.Error }, 0.12)
+            shake()
+            task.delay(1.2, function()
+                if not result then
+                    submitLabel.Text = unlockText
+                    tween(boxStroke, { Color = Theme.Stroke }, 0.3)
+                end
+            end)
+            busy = false
+        end
+    end
+
+    submit.MouseButton1Click:Connect(function()
+        ripple(submit)
+        task.spawn(attempt)
+    end)
+    closeButton.MouseButton1Click:Connect(function()
+        if result ~= nil then
+            return
+        end
+        result = false
+        close()
+        safeCall(opts.OnClose)
+    end)
+    box.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            task.spawn(attempt)
+        end
+    end)
+
+    gui.Parent = opts.Parent or defaultParent()
+    tween(scale, { Scale = 1 }, 0.5, Enum.EasingStyle.Back)
+    tween(root, { Position = UDim2.fromScale(0.5, 0.5) }, 0.5, Enum.EasingStyle.Quint)
+    tween(body, { GroupTransparency = 0 }, 0.35)
+    tween(bodyStroke, { Transparency = 0 }, 0.35)
+    tween(shadow, { ImageTransparency = 0.6 }, 0.45)
+    task.delay(0.4, function()
+        box:CaptureFocus()
+    end)
+
+    while result == nil and gui.Parent do
+        task.wait(0.1)
+    end
+    if result == true and acceptedKey and validate(acceptedKey) then
+        safeCall(opts.Callback, acceptedKey)
+        return true, acceptedKey
+    end
+    return false, nil
+end
+
+Library.CreateKeySystem = Library.KeySystem
+
 
 function Library:Notify(opts)
     local window = Library.Windows[#Library.Windows]
@@ -3879,7 +4588,6 @@ function Window:Notify(opts)
     self._notifyOrder = self._notifyOrder + 1
     local outer = create("Frame", {
         Size = UDim2.new(1, 0, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundTransparency = 1,
         LayoutOrder = self._notifyOrder,
         Parent = self.NotifyHolder,
@@ -3988,6 +4696,11 @@ function Window:Notify(opts)
     })
     corner(progress, UDim.new(1, 0))
 
+    task.defer(function()
+        if outer.Parent then
+            tween(outer, { Size = UDim2.new(1, 0, 0, toast.AbsoluteSize.Y) }, 0.3, Enum.EasingStyle.Quint)
+        end
+    end)
     tween(slide, { Position = UDim2.fromOffset(0, 0) }, 0.5, Enum.EasingStyle.Back)
     tween(toast, { GroupTransparency = 0 }, 0.3)
     tween(shadow, { ImageTransparency = 0.6 }, 0.4)
@@ -4010,8 +4723,6 @@ function Window:Notify(opts)
         tween(toastStroke, { Transparency = 1 }, 0.15)
         tween(shadow, { ImageTransparency = 1 }, 0.2)
         task.delay(0.22, function()
-            outer.AutomaticSize = Enum.AutomaticSize.None
-            outer.Size = UDim2.new(1, 0, 0, outer.AbsoluteSize.Y)
             outer.ClipsDescendants = true
             tween(outer, { Size = UDim2.new(1, 0, 0, -4) }, 0.22, Enum.EasingStyle.Quint)
             task.delay(0.24, function()
@@ -4065,6 +4776,18 @@ local Airflow = Library
 local Window = Airflow:CreateWindow({
     Name = "Airflow",
     LoadingSubtitle = "Example",
+    KeySystem = {
+        Title = "Airflow",
+        Subtitle = "Enter your key to continue",
+        UnlockText = "Unlock",
+        Key = "airflow", -- or Keys = { "a", "b" }, or Validate = function(Key) return Key == "x" end
+        -- Provider = "Luarmor", ScriptId = "...", LoadScript = true
+        -- Provider = "LuaProt", ScriptId = "...", LoadScript = true
+        GetKeyURL = { Copy = "https://example.com/key", Open = "https://example.com/key" },
+        Discord = { Copy = "dsc.gg/airflowscript", Open = "https://dsc.gg/airflowscript" },
+        Website = { Copy = "airflowscript.com", Open = "https://airflowscript.com" },
+        Save = true, -- remembers a correct key so it is only entered once
+    },
     ToggleUIKeybind = "RightControl", -- key that hides and shows the window
     -- examples: "RightShift", "RightControl", "LeftAlt", "Insert", "Home", "F1", "Backquote"
     -- Enum.KeyCode values also work: ToggleUIKeybind = Enum.KeyCode.RightShift
