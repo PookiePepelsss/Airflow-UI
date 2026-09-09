@@ -415,23 +415,43 @@ local function arrowIndicator(parent, anchorX, offsetX)
     return indicator
 end
 
+local ripplePool = {}
+
 local function ripple(button)
     local mouse = pointerPosition()
     local diameter = math.max(button.AbsoluteSize.X, button.AbsoluteSize.Y) * 2.2
-    local circle = create("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromOffset(mouse.X - button.AbsolutePosition.X, mouse.Y - button.AbsolutePosition.Y),
-        Size = UDim2.fromOffset(0, 0),
-        BackgroundColor3 = Theme.Accent,
-        BackgroundTransparency = 0.82,
-        BorderSizePixel = 0,
-        ZIndex = button.ZIndex + 1,
-        Parent = button,
-    })
-    corner(circle, UDim.new(1, 0))
+    local circle = table.remove(ripplePool)
+    if not circle then
+        circle = create("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundColor3 = Theme.Accent,
+            BorderSizePixel = 0,
+        })
+        corner(circle, UDim.new(1, 0))
+    end
+    circle.Position = UDim2.fromOffset(mouse.X - button.AbsolutePosition.X, mouse.Y - button.AbsolutePosition.Y)
+    circle.Size = UDim2.fromOffset(0, 0)
+    circle.BackgroundTransparency = 0.82
+    circle.ZIndex = button.ZIndex + 1
+    circle.Parent = button
     tween(circle, { Size = UDim2.fromOffset(diameter, diameter), BackgroundTransparency = 1 }, 0.55)
     task.delay(0.55, function()
-        circle:Destroy()
+        circle.Parent = nil
+        if #ripplePool < 4 then
+            table.insert(ripplePool, circle)
+        else
+            circle:Destroy()
+        end
+    end)
+end
+
+local function flashStroke(strokeObject)
+    if not strokeObject then
+        return
+    end
+    tween(strokeObject, { Color = Theme.Accent, Transparency = 0.2 }, 0.08)
+    task.delay(0.12, function()
+        tween(strokeObject, { Color = Theme.Stroke, Transparency = 0 }, 0.35)
     end)
 end
 
@@ -771,8 +791,8 @@ function Tab:Button(opts)
 end
 
 function Tab:Toggle(opts)
-    local button
-    opts, button = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default" }, "TextButton", 56, "Toggle")
+    local button, buttonStroke
+    opts, button, buttonStroke = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default" }, "TextButton", 56, "Toggle")
 
     local pill = create("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
@@ -826,6 +846,7 @@ function Tab:Toggle(opts)
         end
     end
 
+    local fromClick = false
     function self_:Set(value, silent)
         value = value == true
         if value == self_.Value then
@@ -833,6 +854,9 @@ function Tab:Toggle(opts)
         end
         self_.Value = value
         render(true)
+        if not fromClick then
+            flashStroke(buttonStroke)
+        end
         if not silent then
             safeCall(opts.Callback, value)
         end
@@ -844,7 +868,9 @@ function Tab:Toggle(opts)
 
     render(false)
     button.MouseButton1Click:Connect(function()
+        fromClick = true
         self_:Set(not self_.Value)
+        fromClick = false
     end)
 
     local handle = finishElement(self, opts, self_, button, "Toggle")
@@ -953,7 +979,7 @@ function Tab:Slider(opts)
 
     local track = create("Frame", {
         Position = UDim2.new(0, 14, 0, CARD_HEIGHT_DESC - 18),
-        Size = UDim2.new(1, -28, 0, 4),
+        Size = UDim2.new(1, -28, 0, 5),
         BackgroundColor3 = Theme.Surface3,
         BorderSizePixel = 0,
         Parent = frame,
@@ -1096,6 +1122,7 @@ function Tab:Slider(opts)
         else
             settleTo(previousFrac)
             bounceKnob()
+            flashStroke(frameStroke)
         end
         if not silent then
             safeCall(opts.Callback, value)
@@ -1149,8 +1176,8 @@ function Tab:Dropdown(opts)
     end
     local multi = opts.Multi == true
     local options = opts.Options or {}
-    local frame, _, height
-    opts, frame, _, height = beginElement(self, opts, {}, "Frame")
+    local frame, frameStroke, height
+    opts, frame, frameStroke, height = beginElement(self, opts, {}, "Frame")
     frame.ClipsDescendants = true
 
     local header = create("TextButton", {
@@ -1355,13 +1382,26 @@ function Tab:Dropdown(opts)
                 end
             end)
         else
-            self_._openGeneration = (self_._openGeneration or 0) + 1
+            local generation = (self_._openGeneration or 0) + 1
+            self_._openGeneration = generation
+            local visible = {}
             for _, option in ipairs(options) do
                 local button = optionButtons[option]
                 if button and button.Frame.Visible then
-                    show(button)
+                    table.insert(visible, button)
                 end
             end
+            task.spawn(function()
+                for index = #visible, 1, -1 do
+                    show(visible[index])
+                    if index > 1 then
+                        task.wait(0.015)
+                        if self_._openGeneration ~= generation or self_.Open then
+                            return
+                        end
+                    end
+                end
+            end)
         end
     end
 
@@ -1458,6 +1498,7 @@ function Tab:Dropdown(opts)
             selected[value] = true
         end
         renderValueLabel()
+        flashStroke(frameStroke)
         if not silent then
             safeCall(opts.Callback, currentValue())
         end
@@ -1500,8 +1541,8 @@ function Tab:Dropdown(opts)
 end
 
 function Tab:Input(opts)
-    local frame, _, _, titleLabel, descLabel
-    opts, frame, _, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", PlaceholderText = "Placeholder", CurrentValue = "Default", Value = "Default" }, "Frame", 160, "Input")
+    local frame, frameStroke, _, titleLabel, descLabel
+    opts, frame, frameStroke, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", PlaceholderText = "Placeholder", CurrentValue = "Default", Value = "Default" }, "Frame", 160, "Input")
 
     local boxHolder = create("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
@@ -1574,6 +1615,7 @@ function Tab:Input(opts)
     return finishElement(self, opts, {
         Set = function(_, value)
             box.Text = tostring(value)
+            flashStroke(frameStroke)
         end,
         Get = function()
             return box.Text
@@ -1582,8 +1624,8 @@ function Tab:Input(opts)
 end
 
 function Tab:Keybind(opts)
-    local frame, _, _, titleLabel, descLabel
-    opts, frame, _, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentKeybind = "Default", Value = "Default" }, "Frame", 110, "Keybind")
+    local frame, frameStroke, _, titleLabel, descLabel
+    opts, frame, frameStroke, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentKeybind = "Default", Value = "Default" }, "Frame", 110, "Keybind")
     if type(opts.Default) == "string" then
         opts.Default = Enum.KeyCode[opts.Default]
     end
@@ -1632,9 +1674,13 @@ function Tab:Keybind(opts)
     end
 
     function self_:Set(keyCode, silent)
+        local wasListening = self_.Listening
         self_.Value = keyCode
         self_.Listening = false
         render()
+        if not wasListening then
+            flashStroke(frameStroke)
+        end
         if not silent then
             safeCall(opts.OnChanged, keyCode)
         end
@@ -1675,8 +1721,8 @@ end
 
 function Tab:ColorPicker(opts)
     local PANEL_HEIGHT = 168
-    local frame, _, height
-    opts, frame, _, height = beginElement(self, opts, { Title = "Name", Description = "Desc", Color = "Default", CurrentValue = "Default", Value = "Default" }, "Frame")
+    local frame, frameStroke, height
+    opts, frame, frameStroke, height = beginElement(self, opts, { Title = "Name", Description = "Desc", Color = "Default", CurrentValue = "Default", Value = "Default" }, "Frame")
     frame.ClipsDescendants = true
 
     local header = create("TextButton", {
@@ -1850,6 +1896,7 @@ function Tab:ColorPicker(opts)
     function self_:Set(color, silent)
         hue, sat, val = Color3.toHSV(color)
         commit(0.25, silent)
+        flashStroke(frameStroke)
     end
 
     function self_:Get()
@@ -1940,8 +1987,8 @@ function Tab:ColorPicker(opts)
 end
 
 function Tab:Stepper(opts)
-    local frame, _, _, titleLabel, descLabel
-    opts, frame, _, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default", Increment = "Step" }, "Frame", 150, "Stepper")
+    local frame, frameStroke, _, titleLabel, descLabel
+    opts, frame, frameStroke, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default", Increment = "Step" }, "Frame", 150, "Stepper")
     local min = opts.Min or 0
     local max = opts.Max or 100
     local step = opts.Step or 1
@@ -2014,6 +2061,7 @@ function Tab:Stepper(opts)
 
     local self_ = { Value = math.clamp(opts.Default or min, min, max) }
     local snap = numbers.snap
+    local fromButton = false
     local function render()
         valueLabel.Text = numbers.format(self_.Value) .. suffix
         tween(minus, { TextTransparency = self_.Value <= min and 0.6 or 0 }, 0.15)
@@ -2026,6 +2074,9 @@ function Tab:Stepper(opts)
         end
         self_.Value = value
         render()
+        if not fromButton then
+            flashStroke(frameStroke)
+        end
         if not silent then
             safeCall(opts.Callback, value)
         end
@@ -2035,7 +2086,9 @@ function Tab:Stepper(opts)
     end
 
     local function bump(direction)
+        fromButton = true
         self_:Set(self_.Value + direction * step)
+        fromButton = false
         tween(groupStroke, { Color = Theme.StrokeHover }, 0.08)
         task.delay(0.12, function()
             tween(groupStroke, { Color = Theme.Stroke }, 0.2)
@@ -2473,6 +2526,22 @@ function Library.Window(_, opts)
         Parent = body,
     })
     self.Content = content
+    self._outLayer = create("CanvasGroup", {
+        Name = "TransitionOut",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Visible = false,
+        ZIndex = 2,
+        Parent = content,
+    })
+    self._inLayer = create("CanvasGroup", {
+        Name = "TransitionIn",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Visible = false,
+        ZIndex = 3,
+        Parent = content,
+    })
 
     local closeButton = create("TextButton", {
         AnchorPoint = Vector2.new(1, 0),
@@ -2488,6 +2557,7 @@ function Library.Window(_, opts)
         ZIndex = 5,
         Parent = content,
     })
+    padding(closeButton, 0, 0, 1, 0)
     corner(closeButton, UDim.new(0, 8))
     table.insert(self._controls, closeButton)
     closeButton.MouseEnter:Connect(function()
@@ -3298,11 +3368,10 @@ function Window:Tab(opts, icon)
         Parent = button,
     })
 
-    local page = create("CanvasGroup", {
+    local page = create("Frame", {
         Name = tab.Name,
         Size = UDim2.fromScale(1, 1),
         BackgroundTransparency = 1,
-        GroupTransparency = 1,
         Visible = false,
         Parent = self.Content,
     })
@@ -3359,7 +3428,7 @@ function Window:Tab(opts, icon)
         Size = UDim2.fromOffset(26, 26),
         BackgroundTransparency = 1,
         ImageColor3 = Theme.Muted,
-        ImageTransparency = 0.4,
+        ImageTransparency = 0.15,
         ScaleType = Enum.ScaleType.Fit,
         Parent = empty,
     })
@@ -3683,6 +3752,10 @@ function Window:SelectTab(tab)
     local previous = self.CurrentTab
     self.CurrentTab = tab
 
+    self:_settleTransition()
+    local generation = (self._transitionGeneration or 0) + 1
+    self._transitionGeneration = generation
+
     if previous then
         tween(previous._button, { BackgroundTransparency = 1 }, 0.2)
         tween(previous._stroke, { Transparency = 1 }, 0.2)
@@ -3690,11 +3763,16 @@ function Window:SelectTab(tab)
         if previous._icon then
             tween(previous._icon, { ImageColor3 = Theme.Muted }, 0.2)
         end
-        local previousPage = previous._page
-        tween(previousPage, { GroupTransparency = 1, Position = UDim2.fromOffset(0, -10) }, 0.18)
+        local outLayer = self._outLayer
+        previous._page.Parent = outLayer
+        self._outPage = previous._page
+        outLayer.GroupTransparency = 0
+        outLayer.Position = UDim2.fromOffset(0, 0)
+        outLayer.Visible = true
+        tween(outLayer, { GroupTransparency = 1, Position = UDim2.fromOffset(0, -10) }, 0.18)
         task.delay(0.18, function()
-            if self.CurrentTab ~= previous then
-                previousPage.Visible = false
+            if self._transitionGeneration == generation then
+                self:_settleOut()
             end
         end)
     end
@@ -3709,9 +3787,45 @@ function Window:SelectTab(tab)
     self:_placeIndicator(tab)
 
     local page = tab._page
-    page.Position = UDim2.fromOffset(0, 14)
+    local inLayer = self._inLayer
+    page.Position = UDim2.fromOffset(0, 0)
     page.Visible = true
-    tween(page, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) }, 0.32, Enum.EasingStyle.Quint)
+    page.Parent = inLayer
+    self._inPage = page
+    inLayer.GroupTransparency = 1
+    inLayer.Position = UDim2.fromOffset(0, 14)
+    inLayer.Visible = true
+    tween(inLayer, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) }, 0.32, Enum.EasingStyle.Quint)
+    task.delay(0.32, function()
+        if self._transitionGeneration == generation then
+            self:_settleIn()
+        end
+    end)
+end
+
+function Window:_settleOut()
+    local page = self._outPage
+    if page then
+        page.Parent = self.Content
+        page.Visible = false
+        self._outPage = nil
+    end
+    self._outLayer.Visible = false
+end
+
+function Window:_settleIn()
+    local page = self._inPage
+    if page then
+        page.Parent = self.Content
+        page.Position = UDim2.fromOffset(0, 0)
+        self._inPage = nil
+    end
+    self._inLayer.Visible = false
+end
+
+function Window:_settleTransition()
+    self:_settleOut()
+    self:_settleIn()
 end
 
 function Window:Toggle(open)
@@ -3895,8 +4009,14 @@ function Window:Notify(opts)
         tween(toast, { GroupTransparency = 1 }, 0.2)
         tween(toastStroke, { Transparency = 1 }, 0.15)
         tween(shadow, { ImageTransparency = 1 }, 0.2)
-        task.delay(0.3, function()
-            outer:Destroy()
+        task.delay(0.22, function()
+            outer.AutomaticSize = Enum.AutomaticSize.None
+            outer.Size = UDim2.new(1, 0, 0, outer.AbsoluteSize.Y)
+            outer.ClipsDescendants = true
+            tween(outer, { Size = UDim2.new(1, 0, 0, -4) }, 0.22, Enum.EasingStyle.Quint)
+            task.delay(0.24, function()
+                outer:Destroy()
+            end)
         end)
     end
 
