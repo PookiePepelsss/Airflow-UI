@@ -8,7 +8,6 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local Library = {}
-Library.__index = Library
 
 Library.Flags = {}
 Library.Windows = {}
@@ -83,7 +82,6 @@ Library.Theme = {
     Surface = Color3.fromRGB(24, 19, 24),
     Surface2 = Color3.fromRGB(28, 22, 28),
     Surface3 = Color3.fromRGB(42, 36, 43),
-    SurfaceHover = Color3.fromRGB(40, 33, 41),
     Stroke = Color3.fromRGB(40, 32, 41),
     StrokeHover = Color3.fromRGB(88, 70, 90),
     Accent = Color3.fromRGB(235, 199, 246),
@@ -155,13 +153,7 @@ local function resolveIcon(icon)
     return nil
 end
 
-Library.Icons = {
-    Key = "key-round",
-    Submit = "chevron-right",
-    Link = "external-link",
-    Discord = "message-circle",
-    Logo = "rbxassetid://103859712365480",
-}
+local BUTTON_HINT_ICON = "chevron-right"
 
 local FONT_FAMILY = "rbxasset://fonts/families/BuilderSans.json"
 Library.Fonts = {
@@ -520,7 +512,7 @@ local function card(tab, className, height, opts)
 end
 
 local function titleDesc(parent, name, desc, rightReserve)
-    local title
+    local title, descLabel
     if desc then
         local top = (CARD_HEIGHT_DESC - 38) / 2
         title = label({
@@ -529,7 +521,7 @@ local function titleDesc(parent, name, desc, rightReserve)
             Text = name,
             Parent = parent,
         })
-        label({
+        descLabel = label({
             Position = UDim2.fromOffset(14, top + 20),
             Size = UDim2.new(1, -(14 + rightReserve), 0, 17),
             Text = desc,
@@ -546,7 +538,7 @@ local function titleDesc(parent, name, desc, rightReserve)
             Parent = parent,
         })
     end
-    return title
+    return title, descLabel
 end
 
 local function beginElement(tab, opts, map, className, rightReserve, fallbackName)
@@ -554,11 +546,20 @@ local function beginElement(tab, opts, map, className, rightReserve, fallbackNam
     local height = opts.Desc and CARD_HEIGHT_DESC or CARD_HEIGHT
     local frame, frameStroke = card(tab, className or "Frame", height, opts)
     hoverStroke(frame, frameStroke)
-    local title
+    local title, descLabel
     if rightReserve then
-        title = titleDesc(frame, opts.Name or fallbackName, opts.Desc, rightReserve)
+        title, descLabel = titleDesc(frame, opts.Name or fallbackName, opts.Desc, rightReserve)
     end
-    return opts, frame, frameStroke, height, title
+    return opts, frame, frameStroke, height, title, descLabel
+end
+
+local function reserveRight(title, descLabel, width)
+    if title then
+        title.Size = UDim2.new(1, -(14 + width), title.Size.Y.Scale, title.Size.Y.Offset)
+    end
+    if descLabel then
+        descLabel.Size = UDim2.new(1, -(14 + width), 0, descLabel.Size.Y.Offset)
+    end
 end
 
 local Tab = {}
@@ -586,6 +587,7 @@ function Tab:Section(text)
         Text = string.upper(text),
         TextSize = 12,
         TextColor3 = Theme.Muted,
+        TextTruncate = Enum.TextTruncate.None,
         Parent = holder,
     })
     local rule = create("Frame", {
@@ -748,7 +750,7 @@ function Tab:Button(opts)
         end
     end
 
-    local hint = glowIcon(button, Library.Icons.Submit, primary and Theme.AccentDark or Theme.Muted, UDim2.new(1, -30, 0.5, 0))
+    local hint = glowIcon(button, BUTTON_HINT_ICON, primary and Theme.AccentDark or Theme.Muted, UDim2.new(1, -30, 0.5, 0))
     button.MouseEnter:Connect(function()
         tween(hint, { Position = UDim2.new(1, -26, 0.5, 0) }, 0.2)
     end)
@@ -910,6 +912,7 @@ function Tab:Slider(opts)
         Text = suffix,
         TextSize = 13,
         TextColor3 = Theme.Accent,
+        TextTruncate = Enum.TextTruncate.None,
         Visible = false,
         Parent = valueChip,
     })
@@ -1157,7 +1160,7 @@ function Tab:Dropdown(opts)
         AutoButtonColor = false,
         Parent = frame,
     })
-    titleDesc(header, opts.Name or "Dropdown", opts.Desc, 180)
+    local titleLabel, descLabel = titleDesc(header, opts.Name or "Dropdown", opts.Desc, 180)
 
     local chip = create("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
@@ -1175,11 +1178,14 @@ function Tab:Dropdown(opts)
         Size = UDim2.new(1, -34, 1, 0),
         TextColor3 = Theme.Muted,
         TextSize = 13,
+        TextTruncate = Enum.TextTruncate.None,
+        ClipsDescendants = true,
         Parent = chip,
     })
     local arrow = arrowIndicator(chip, 1, -6)
     local function fitChip(instant)
         local width = math.clamp(valueLabel.TextBounds.X + 10 + 34, 60, 190)
+        reserveRight(titleLabel, descLabel, width + 20)
         if instant then
             chip.Size = UDim2.fromOffset(width, CHIP_HEIGHT)
         else
@@ -1494,8 +1500,8 @@ function Tab:Dropdown(opts)
 end
 
 function Tab:Input(opts)
-    local frame
-    opts, frame = beginElement(self, opts, { Title = "Name", Description = "Desc", PlaceholderText = "Placeholder", CurrentValue = "Default", Value = "Default" }, "Frame", 160, "Input")
+    local frame, _, _, titleLabel, descLabel
+    opts, frame, _, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", PlaceholderText = "Placeholder", CurrentValue = "Default", Value = "Default" }, "Frame", 160, "Input")
 
     local boxHolder = create("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
@@ -1528,13 +1534,33 @@ function Tab:Input(opts)
         Parent = boxHolder,
     })
 
+    local boxWidth = 170
+    local focused = false
+    local function fitBox(instant)
+        local cardWidth = frame.AbsoluteSize.X / self.Window.Scale.Scale
+        boxWidth = math.clamp(cardWidth - 14 - 110 - 20, 100, 170)
+        reserveRight(titleLabel, descLabel, boxWidth + 20)
+        local width = boxWidth + (focused and 10 or 0)
+        if instant then
+            boxHolder.Size = UDim2.fromOffset(width, 30)
+        else
+            tween(boxHolder, { Size = UDim2.fromOffset(width, 30) }, 0.2)
+        end
+    end
+    frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        fitBox(true)
+    end)
+    task.defer(fitBox, true)
+
     box.Focused:Connect(function()
+        focused = true
         tween(boxStroke, { Color = Theme.StrokeHover }, 0.15)
-        tween(boxHolder, { Size = UDim2.fromOffset(180, 30) }, 0.2)
+        fitBox(false)
     end)
     box.FocusLost:Connect(function(enterPressed)
+        focused = false
         tween(boxStroke, { Color = Theme.Stroke }, 0.15)
-        tween(boxHolder, { Size = UDim2.fromOffset(170, 30) }, 0.2)
+        fitBox(false)
         if opts.Numeric then
             local number = tonumber(box.Text)
             if not number then
@@ -1556,8 +1582,8 @@ function Tab:Input(opts)
 end
 
 function Tab:Keybind(opts)
-    local frame
-    opts, frame = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentKeybind = "Default", Value = "Default" }, "Frame", 110, "Keybind")
+    local frame, _, _, titleLabel, descLabel
+    opts, frame, _, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentKeybind = "Default", Value = "Default" }, "Frame", 110, "Keybind")
     if type(opts.Default) == "string" then
         opts.Default = Enum.KeyCode[opts.Default]
     end
@@ -1588,6 +1614,7 @@ function Tab:Keybind(opts)
 
     local function fitChip(instant)
         local width = math.max(chipLabel.TextBounds.X + 20, TOUCH and 44 or 36)
+        reserveRight(titleLabel, descLabel, width + 20)
         if instant then
             chip.Size = UDim2.fromOffset(width, CHIP_HEIGHT)
         else
@@ -1913,8 +1940,8 @@ function Tab:ColorPicker(opts)
 end
 
 function Tab:Stepper(opts)
-    local frame
-    opts, frame = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default", Increment = "Step" }, "Frame", 150, "Stepper")
+    local frame, _, _, titleLabel, descLabel
+    opts, frame, _, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default", Increment = "Step" }, "Frame", 150, "Stepper")
     local min = opts.Min or 0
     local max = opts.Max or 100
     local step = opts.Step or 1
@@ -1980,6 +2007,9 @@ function Tab:Stepper(opts)
     end
     valueLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
         fitValue(false)
+    end)
+    group:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        reserveRight(titleLabel, descLabel, group.AbsoluteSize.X / self.Window.Scale.Scale + 20)
     end)
 
     local self_ = { Value = math.clamp(opts.Default or min, min, max) }
@@ -2123,7 +2153,6 @@ function Tab:Progress(opts)
     return finishElement(self, opts, self_, frame, "Progress")
 end
 
-Tab.ProgressBar = Tab.Progress
 
 function Tab:ConfigManager(opts)
     opts = normalize(opts, {})
@@ -2209,7 +2238,6 @@ function Tab:ConfigManager(opts)
     return manager
 end
 
-Tab.Colorpicker = Tab.ColorPicker
 for name, method in pairs(table.clone(Tab)) do
     if type(method) == "function" and name:sub(1, 1) ~= "_" and name:sub(1, 6) ~= "Create" then
         Tab["Create" .. name] = method
@@ -2225,7 +2253,7 @@ local NOTIFY_COLORS = {
 local Window = {}
 Window.__index = Window
 
-function Library:Window(opts)
+function Library.Window(_, opts)
     opts = normalize(opts, { Name = "Title", LoadingSubtitle = "Subtitle", ToggleUIKeybind = "Keybind" })
     if type(opts.Keybind) == "string" then
         opts.Keybind = Enum.KeyCode[opts.Keybind]
@@ -2377,10 +2405,24 @@ function Library:Window(opts)
         BackgroundColor3 = Theme.Accent,
         BorderSizePixel = 0,
         Visible = false,
+        ZIndex = 2,
         Parent = sidebar,
     })
     corner(indicator, UDim.new(1, 0))
     self.Indicator = indicator
+    local lastCanvasY = tabList.CanvasPosition.Y
+    table.insert(self._connections, RunService.RenderStepped:Connect(function()
+        local canvasY = tabList.CanvasPosition.Y
+        if canvasY == lastCanvasY or not self.CurrentTab or not self._introDone then
+            return
+        end
+        lastCanvasY = canvasY
+        local targetY = self:_indicatorY(self.CurrentTab)
+        local top = tabList.Position.Y.Offset
+        local bottom = top + tabList.AbsoluteSize.Y / self.Scale.Scale
+        indicator.Visible = targetY > top and targetY < bottom
+        indicator.Position = UDim2.fromOffset(6, targetY)
+    end))
 
     local footer = create("Frame", {
         Position = UDim2.new(0, 22, 1, -36),
@@ -2404,12 +2446,13 @@ function Library:Window(opts)
         Text = keyName(keybind),
         TextSize = 11,
         TextColor3 = Theme.Muted,
+        TextTruncate = Enum.TextTruncate.None,
         Parent = keyChip,
     })
     self._keyChipLabel = keyChipLabel
     local hintLabel = label({
         Size = UDim2.new(1, 0, 1, 0),
-        Text = (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) and "or tap the pill" or "to hide",
+        Text = TOUCH and "or tap the pill" or "to hide",
         TextSize = 12,
         FontFace = Fonts.Regular,
         TextColor3 = Theme.Muted,
@@ -2528,7 +2571,7 @@ function Library:Window(opts)
         self:_fitToScreen()
         self:_clampToScreen()
     end))
-    if opts.OpenButton ~= nil and opts.OpenButton ~= false or (opts.OpenButton == nil and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) then
+    if (opts.OpenButton ~= nil and opts.OpenButton ~= false) or (opts.OpenButton == nil and TOUCH) then
         self:_createOpenButton(type(opts.OpenButton) == "table" and opts.OpenButton or {})
     end
     self._introDone = false
@@ -2537,9 +2580,9 @@ function Library:Window(opts)
 
     local loading = opts.Loading
     if type(loading) == "table" then
-        opts.LoadingDuration = loading.Duration or loading.Time or opts.LoadingDuration
+        opts.LoadingDuration = loading.Duration or opts.LoadingDuration
         opts.LoadingText = loading.Text or loading.Subtitle or opts.LoadingText
-        opts.LoadingSteps = loading.Steps or loading.Texts or opts.LoadingSteps
+        opts.LoadingSteps = loading.Steps or opts.LoadingSteps
         opts.LoadingTitle = loading.Title or opts.LoadingTitle
         loading = loading.Enabled ~= false
     end
@@ -2584,7 +2627,7 @@ end
 
 local function isShown(object, stopAt, point)
     local child = object
-    while child and child ~= stopAt do
+    while child and child ~= stopAt and child:IsA("GuiObject") do
         if not child.Visible then
             return false
         end
@@ -2657,7 +2700,7 @@ function Window:_enableDrag()
     end))
 end
 
-local function popIn(object, delay, distance)
+local function popIn(object, delay)
     object.Visible = false
     task.delay(delay, function()
         if not object.Parent then
@@ -2956,6 +2999,7 @@ function Window:_createOpenButton(opts)
         AutomaticSize = Enum.AutomaticSize.X,
         Text = opts.Title or "Airflow",
         TextSize = 13,
+        TextTruncate = Enum.TextTruncate.None,
         ZIndex = 31,
         Parent = pill,
     })
@@ -3163,8 +3207,6 @@ function Window:LoadConfig(name, silent)
     return true
 end
 
-Window.LoadConfiguration = Window.LoadConfig
-Window.SaveConfiguration = Window.SaveConfig
 
 function Window:DeleteConfig(name)
     if not fileApiAvailable() or type(delfile) ~= "function" then
@@ -3236,7 +3278,7 @@ function Window:Tab(opts, icon)
 
     local hasIcon = opts.Icon ~= nil
     if hasIcon then
-        local icon = create("ImageLabel", {
+        local iconImage = create("ImageLabel", {
             AnchorPoint = Vector2.new(0, 0.5),
             Position = UDim2.new(0, 12, 0.5, 0),
             Size = UDim2.fromOffset(16, 16),
@@ -3245,8 +3287,8 @@ function Window:Tab(opts, icon)
             ScaleType = Enum.ScaleType.Fit,
             Parent = button,
         })
-        applyIcon(icon, opts.Icon)
-        tab._icon = icon
+        applyIcon(iconImage, opts.Icon)
+        tab._icon = iconImage
     end
     tab._label = label({
         Position = UDim2.fromOffset(hasIcon and 36 or 14, 0),
@@ -3616,11 +3658,16 @@ function Window:_listen(kind, handler, owner)
     return disconnect
 end
 
+function Window:_indicatorY(tab)
+    local list = self.TabList
+    local scale = self.Scale.Scale
+    return (tab._button.AbsolutePosition.Y - list.AbsolutePosition.Y + tab._button.AbsoluteSize.Y / 2) / scale
+        + list.Position.Y.Offset
+end
+
 function Window:_placeIndicator(tab)
     local indicator = self.Indicator
-    local scale = self.Scale.Scale
-    local targetY = (tab._button.AbsolutePosition.Y - self.TabList.AbsolutePosition.Y + tab._button.AbsoluteSize.Y / 2) / scale
-        + self.TabList.Position.Y.Offset
+    local targetY = self:_indicatorY(tab)
     if not indicator.Visible then
         indicator.Visible = true
         indicator.Position = UDim2.fromOffset(6, targetY)
