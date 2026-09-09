@@ -35,7 +35,7 @@ local Window = Airflow:CreateWindow({
     },
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "MyHub",
+        FolderName = "MyHub", -- folder for saved configs
         FileName = "default",
     },
     Parent = game:GetService("CoreGui"),
@@ -43,6 +43,7 @@ local Window = Airflow:CreateWindow({
 
 Window:Toggle(false)
 ```
+
 
 Drag any empty area to move it and the bottom-right grip to resize it. It scales down on small screens and never leaves the viewport.
 
@@ -84,6 +85,9 @@ Drag any empty area to move it and the bottom-right grip to resize it. It scales
 | `Confirm(opts)` / `Dialog(opts)` | See [Confirm](#confirm). |
 | `SaveConfig / LoadConfig / DeleteConfig / ListConfigs` | See [Configs](#configs). |
 | `Destroy()` | Fade out, disconnect everything, remove the gui. |
+
+
+---
 
 ---
 
