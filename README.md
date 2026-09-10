@@ -86,9 +86,6 @@ Drag any empty area to move it and the bottom-right grip to resize it. It scales
 | `SaveConfig / LoadConfig / DeleteConfig / ListConfigs` | See [Configs](#configs). |
 | `Destroy()` | Fade out, disconnect everything, remove the gui. |
 
-
----
-
 ---
 
 ## Tab
@@ -771,6 +768,36 @@ Tab:CreateButton({
 ```
 
 Names resolve through the [Footagesus/Icons](https://github.com/Footagesus/Icons) list, fetched once on first use; `Airflow:PreloadIcons()` fetches it up front. `rbxassetid://` strings and `{ Image, RectOffset, RectSize }` tables also work.
+
+---
+
+## Fonts
+
+> Download a font once and use it everywhere.
+
+```lua
+Airflow:LoadFont({ Name = "ValleySans" })
+
+Airflow:LoadFont({
+    Name = "MyFont",
+    Folder = "AirFlowFonts",
+    Weights = {
+        Regular = "https://example.com/MyFont-Regular.ttf",
+        Medium = "https://example.com/MyFont-Medium.ttf",
+        SemiBold = "https://example.com/MyFont-SemiBold.ttf",
+    },
+})
+```
+
+Call it before `CreateWindow`. The TTFs are saved to the folder on first run and reused after that; a family file is generated and loaded through `getcustomasset`. Needs `writefile`, `isfile` and `getcustomasset`; without them the default Builder Sans stays. `ValleySans` is built in as a preset.
+
+### Properties
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `Name` | string | — | Family name. `"ValleySans"` uses the built-in URLs. |
+| `Folder` | string | `"AirFlowFonts"` | Where the TTFs and family file are saved. |
+| `Weights` | table | preset | `Regular`, `Medium`, `SemiBold`, `Bold` → TTF URL. Missing weights fall back to the nearest one. |
 
 ---
 
