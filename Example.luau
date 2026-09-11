@@ -109,7 +109,7 @@ local function loadLucide()
         lucideSet = result
     else
         lucideSet = false
-        warn("[AirflowUI] lucide icons unavailable: " .. tostring(result))
+        warn("[AirFlow] lucide icons unavailable: " .. tostring(result))
     end
     return lucideSet
 end
@@ -132,13 +132,13 @@ local FONT_WEIGHTS = {
 function Library:LoadFont(opts)
     opts = normalize(opts, {})
     if type(writefile) ~= "function" or type(isfile) ~= "function" or typeof(getcustomasset) ~= "function" then
-        warn("[AirflowUI] custom fonts need writefile, isfile and getcustomasset")
+        warn("[AirFlow] custom fonts need writefile, isfile and getcustomasset")
         return false
     end
     local name = opts.Name or "CustomFont"
     local weights = opts.Weights or FONT_PRESETS[name]
     if type(weights) ~= "table" then
-        warn("[AirflowUI] no font weights for " .. name)
+        warn("[AirFlow] no font weights for " .. name)
         return false
     end
     local folder = opts.Folder or "AirFlowFonts"
@@ -161,7 +161,7 @@ function Library:LoadFont(opts)
             if ok then
                 table.insert(faces, { name = weightName, weight = info[1], style = "normal", assetId = getcustomasset(path) })
             else
-                warn("[AirflowUI] could not download " .. weightName .. " weight of " .. name)
+                warn("[AirFlow] could not download " .. weightName .. " weight of " .. name)
             end
         end
     end
@@ -219,7 +219,7 @@ local function resolveIcon(icon)
     elseif type(entry) == "string" then
         return entry
     end
-    warn("[AirflowUI] unknown lucide icon: " .. name)
+    warn("[AirFlow] unknown lucide icon: " .. name)
     return nil
 end
 
@@ -559,7 +559,7 @@ local function safeCall(callback, ...)
     end
     local ok, err = pcall(callback, ...)
     if not ok then
-        warn("[AirflowUI] callback error: " .. tostring(err))
+        warn("[AirFlow] callback error: " .. tostring(err))
     end
 end
 
@@ -745,7 +745,7 @@ function Tab:Label(opts)
                 if ok and value ~= nil then
                     text_.Text = tostring(value)
                 elseif not ok then
-                    warn("[AirflowUI] label update error: " .. tostring(value))
+                    warn("[AirFlow] label update error: " .. tostring(value))
                 end
                 task.wait(rate)
             end
@@ -840,13 +840,7 @@ function Tab:Button(opts)
         end
     end
 
-    local hint = glowIcon(button, BUTTON_HINT_ICON, primary and Theme.AccentDark or Theme.Muted, UDim2.new(1, -30, 0.5, 0))
-    button.MouseEnter:Connect(function()
-        tween(hint, { Position = UDim2.new(1, -26, 0.5, 0) }, 0.2)
-    end)
-    button.MouseLeave:Connect(function()
-        tween(hint, { Position = UDim2.new(1, -30, 0.5, 0) }, 0.2)
-    end)
+    glowIcon(button, BUTTON_HINT_ICON, primary and Theme.AccentDark or Theme.Muted, UDim2.new(1, -30, 0.5, 0))
 
     button.MouseButton1Click:Connect(function()
         ripple(button)
@@ -2720,12 +2714,12 @@ function Library.Window(_, opts)
     local closeButton = create("TextButton", {
         AnchorPoint = Vector2.new(1, 0),
         Position = UDim2.new(1, -14, 0, 14),
-        Size = UDim2.fromOffset(32, 32),
+        Size = UDim2.fromOffset(34, 34),
         BackgroundColor3 = Theme.Surface2,
         BackgroundTransparency = 1,
         Text = "×",
         TextColor3 = Theme.Muted,
-        TextSize = 26,
+        TextSize = 28,
         FontFace = Fonts.Bold,
         AutoButtonColor = false,
         ZIndex = 5,
@@ -3524,37 +3518,6 @@ function Window:_autoSave()
     end)
 end
 
-local function statRow(parent, order, icon, title)
-    local card = create("Frame", {
-        Size = UDim2.new(0.5, -4, 0, 62),
-        BackgroundColor3 = Theme.Surface2,
-        BorderSizePixel = 0,
-        LayoutOrder = order,
-        Parent = parent,
-    })
-    corner(card)
-    stroke(card)
-    card:SetAttribute("NoDrag", true)
-    if icon then
-        glowIcon(card, icon, Theme.Muted, UDim2.new(0, 14, 0, 21))
-    end
-    label({
-        Position = UDim2.fromOffset(icon and 36 or 14, 12),
-        Size = UDim2.new(1, -(icon and 50 or 28), 0, 16),
-        Text = title,
-        TextSize = 12,
-        TextColor3 = Theme.Muted,
-        Parent = card,
-    })
-    return label({
-        Position = UDim2.fromOffset(14, 34),
-        Size = UDim2.new(1, -28, 0, 18),
-        Text = "…",
-        TextSize = 15,
-        Parent = card,
-    })
-end
-
 local function emptyState(parent, icon, text)
     local holder = create("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
@@ -3587,7 +3550,37 @@ local function emptyState(parent, icon, text)
     return holder, caption, image
 end
 
--- fade a card in without a CanvasGroup, so nothing gets clipped
+local function statRow(parent, order, icon, title)
+    local card = create("Frame", {
+        Size = UDim2.new(0.5, -4, 0, 62),
+        BackgroundColor3 = Theme.Surface2,
+        BorderSizePixel = 0,
+        LayoutOrder = order,
+        Parent = parent,
+    })
+    corner(card)
+    stroke(card)
+    card:SetAttribute("NoDrag", true)
+    if icon then
+        glowIcon(card, icon, Theme.Muted, UDim2.new(0, 14, 0, 21))
+    end
+    label({
+        Position = UDim2.fromOffset(icon and 36 or 14, 12),
+        Size = UDim2.new(1, -(icon and 50 or 28), 0, 16),
+        Text = title,
+        TextSize = 12,
+        TextColor3 = Theme.Muted,
+        Parent = card,
+    })
+    return label({
+        Position = UDim2.fromOffset(14, 34),
+        Size = UDim2.new(1, -28, 0, 18),
+        Text = "…",
+        TextSize = 15,
+        Parent = card,
+    })
+end
+
 local function fadeCard(card)
     local parts = {}
     local function collect(object)
@@ -3626,7 +3619,7 @@ function Window:_buildHome(opts)
     local tab = self:Tab({
         Name = opts.Name or "Home",
         Desc = opts.Desc,
-        Icon = opts.Icon or "layout-dashboard",
+        Icon = opts.Icon or "house",
     })
     local list = tab.List
 
@@ -3655,7 +3648,7 @@ function Window:_buildHome(opts)
         greeting = "Good " .. part .. "."
     end
     local header = create("Frame", {
-        Size = UDim2.new(1, 0, 0, 72),
+        Size = UDim2.new(1, 0, 0, 58),
         BackgroundColor3 = Theme.Surface2,
         BorderSizePixel = 0,
         LayoutOrder = 2,
@@ -3665,8 +3658,8 @@ function Window:_buildHome(opts)
     corner(header)
     stroke(header)
     local avatar = create("ImageLabel", {
-        Position = UDim2.fromOffset(14, 14),
-        Size = UDim2.fromOffset(44, 44),
+        Position = UDim2.fromOffset(12, 11),
+        Size = UDim2.fromOffset(36, 36),
         BackgroundColor3 = Theme.Surface,
         BorderSizePixel = 0,
         Parent = header,
@@ -3682,15 +3675,15 @@ function Window:_buildHome(opts)
         end
     end)
     label({
-        Position = UDim2.fromOffset(70, 18),
-        Size = UDim2.new(1, -84, 0, 18),
+        Position = UDim2.fromOffset(58, 11),
+        Size = UDim2.new(1, -72, 0, 18),
         Text = (opts.Welcome or "Hello, ") .. LocalPlayer.DisplayName,
         TextSize = 15,
         Parent = header,
     })
     label({
-        Position = UDim2.fromOffset(70, 38),
-        Size = UDim2.new(1, -84, 0, 16),
+        Position = UDim2.fromOffset(58, 30),
+        Size = UDim2.new(1, -72, 0, 16),
         Text = greeting,
         TextSize = 13,
         FontFace = Fonts.Regular,
@@ -4029,6 +4022,18 @@ function Window:_buildHome(opts)
                 Parent = button,
             })
             buttons[index] = { Frame = button, Stroke = buttonStroke, Label = text, Icon = iconImage }
+            button.MouseEnter:Connect(function()
+                if self._homeIndex ~= index then
+                    tween(button, { BackgroundTransparency = 0.4 }, 0.12)
+                    tween(buttonStroke, { Transparency = 0.5 }, 0.12)
+                end
+            end)
+            button.MouseLeave:Connect(function()
+                if self._homeIndex ~= index then
+                    tween(button, { BackgroundTransparency = 1 }, 0.2)
+                    tween(buttonStroke, { Transparency = 1 }, 0.2)
+                end
+            end)
             button.MouseButton1Click:Connect(function()
                 select(index)
             end)
@@ -4150,16 +4155,13 @@ function Window:Tab(opts, icon)
     end)
     empty.Visible = true
 
-    local labelX = hasIcon and 36 or 14
     button.MouseEnter:Connect(function()
-        tween(tab._label, { Position = UDim2.fromOffset(labelX + 3, 0) }, 0.2)
         if self.CurrentTab ~= tab then
             tween(button, { BackgroundTransparency = 0.4 }, 0.12)
             tween(buttonStroke, { Transparency = 0.5 }, 0.12)
         end
     end)
     button.MouseLeave:Connect(function()
-        tween(tab._label, { Position = UDim2.fromOffset(labelX, 0) }, 0.25)
         if self.CurrentTab ~= tab then
             tween(button, { BackgroundTransparency = 1 }, 0.2)
             tween(buttonStroke, { Transparency = 1 }, 0.2)
