@@ -20,8 +20,8 @@ local Window = Airflow:CreateWindow({
     LoadingSubtitle = "by Pookie",
     Icon = "wind",
     ToggleUIKeybind = "RightControl",
-    Size = UDim2.fromOffset(640, 420),
-    MinSize = Vector2.new(480, 320),
+    Size = UDim2.fromOffset(640, 480),
+    MinSize = Vector2.new(480, 360),
     MaxSize = Vector2.new(1000, 700),
     MaxNotifications = 4,
     KeepOnScreen = true,
@@ -35,8 +35,23 @@ local Window = Airflow:CreateWindow({
     },
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "MyHub", -- folder for saved configs
+        FolderName = "MyHub",
         FileName = "default",
+    },
+    Home = {
+        Name = "Home",
+        Welcome = "Hello, ",
+        Stats = { "FPS", "Ping", "Executor", "Game", "Region", "Time" },
+        Pages = {
+            {
+                Name = "Changelog",
+                Icon = "scroll-text",
+                Entries = {
+                    { Title = "v1.2", Tag = "Latest", Changes = { "Added the home tab", "Faster dropdowns" } },
+                },
+            },
+            { Name = "Info", Icon = "info", Content = "Any text you want on its own tab." },
+        },
     },
     Parent = game:GetService("CoreGui"),
 })
@@ -44,8 +59,7 @@ local Window = Airflow:CreateWindow({
 Window:Toggle(false)
 ```
 
-
-Drag any empty area to move it and the bottom-right grip to resize it. It scales down on small screens and never leaves the viewport.
+Drag any empty area to move it and the grip in the bottom-right corner to resize it. It scales itself down on small screens and stays inside the viewport.
 
 ### Properties
 
@@ -55,11 +69,11 @@ Drag any empty area to move it and the bottom-right grip to resize it. It scales
 | `LoadingSubtitle` | string | — | Small line under the title. |
 | `Icon` | string \| table | bird logo | Lucide name, `rbxassetid://` string, or `{ Image, RectOffset, RectSize }`. |
 | `ToggleUIKeybind` | string \| KeyCode | `"RightControl"` | Hides and shows the window. `"RightShift"`, `"LeftAlt"`, `"Insert"`, `"F1"`, or an `Enum.KeyCode`. |
-| `Size` | UDim2 | `640 × 420` | Starting size. |
-| `MinSize` | Vector2 | `480 × 320` | Smallest size the resize grip allows. |
+| `Size` | UDim2 | `640 × 480` | Starting size. |
+| `MinSize` | Vector2 | `480 × 360` | Smallest size the resize grip allows. |
 | `MaxSize` | Vector2 | unlimited | Largest size the resize grip allows. |
 | `MaxNotifications` | number | `4` | Oldest toast is dismissed past this. |
-| `KeepOnScreen` | boolean | `true` | Nudge the window back inside the viewport after a drag, resize or screen change. `false` lets it sit partly off-screen. |
+| `KeepOnScreen` | boolean | `true` | Nudge the window back inside the viewport after a drag, resize or screen change. |
 | `OpenButton` | boolean \| table | touch-only devices | Floating pill that reopens the window. `true` / `false` to force, `{ Title, Icon }` to customise. |
 | `Loading` | boolean \| table | `true` | Loading card before the window morphs in. `false` skips it. |
 | `Loading.Title` | string | `Name` | Title on the card. |
@@ -67,6 +81,7 @@ Drag any empty area to move it and the bottom-right grip to resize it. It scales
 | `Loading.Steps` | table | 3 built-in lines | Status lines cycled over the duration. |
 | `Loading.Duration` | number | `1.6` | Seconds before the window appears. |
 | `ConfigurationSaving` | table | — | See [Configs](#configs). |
+| `Home` | boolean \| table | — | Adds a first tab with a greeting and live session stats. See [Home](#home). |
 | `Parent` | Instance | `gethui()` / CoreGui | Where the ScreenGui goes. Falls back to PlayerGui. |
 
 ### Handle
@@ -76,6 +91,7 @@ Drag any empty area to move it and the bottom-right grip to resize it. It scales
 | `.Open` | Whether the window is shown. |
 | `.CurrentTab` | The selected tab. |
 | `.Tabs` | Array of tabs. |
+| `.Home` | The home tab, when one was created. |
 | `Toggle(open?)` | Show, hide, or flip. |
 | `SetKeybind(keyCode)` | Change the hide key. Updates the footer chip. |
 | `SetKeepOnScreen(enabled)` | Turn the viewport clamp on or off. |
@@ -85,6 +101,56 @@ Drag any empty area to move it and the bottom-right grip to resize it. It scales
 | `Confirm(opts)` / `Dialog(opts)` | See [Confirm](#confirm). |
 | `SaveConfig / LoadConfig / DeleteConfig / ListConfigs` | See [Configs](#configs). |
 | `Destroy()` | Fade out, disconnect everything, remove the gui. |
+
+---
+
+## Home
+
+> An optional first tab: a greeting card, live session stats, and pages of your own.
+
+```lua
+Home = {
+    Name = "Home",
+    Desc = "Session",
+    Icon = "layout-dashboard",
+    Welcome = "Hello, ",
+    Greeting = "Good to see you.",
+    SectionName = "System info",
+    Stats = { "FPS", "Ping", "Executor", "Game", "Region", "Time", "Players", "Uptime" },
+    TimeFormat = "%H:%M",
+    Pages = {
+        {
+            Name = "Changelog",
+            Icon = "scroll-text",
+            Entries = {
+                { Title = "v1.2", Tag = "Latest", Changes = { "Added the home tab" } },
+                { Title = "v1.1", Date = "Aug 30", Content = "Plain text instead of bullets." },
+            },
+        },
+        { Name = "Info", Icon = "info", Content = "Wrapped text in a card." },
+        { Name = "Custom", Icon = "wrench", Build = function(frame) end },
+    },
+}
+```
+
+The stats refresh once a second and pause while the window is hidden or another tab is open. Pages appear as a pill strip above the content; the greeting only shows on the first page.
+
+### Properties
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `Name` / `Desc` / `Icon` | string | `"Home"` | The tab itself. |
+| `Welcome` | string | `"Hello, "` | Prefix before the player's display name. |
+| `Greeting` | string | time of day | Second line under the welcome. |
+| `SectionName` | string | `"System info"` | Heading above the cards. `Sections = false` hides it. |
+| `Stats` | table | first six | `"FPS"`, `"Ping"`, `"Executor"`, `"Game"`, `"Region"`, `"Time"`, `"Players"`, `"Uptime"`. |
+| `TimeFormat` | string | `"%H:%M"` | `os.date` format for the time card. |
+| `TabIcon` | string | `"layout-grid"` | Icon on the built-in details page button. |
+| `Pages` | table | — | Extra pages beside the details one. |
+| `Pages[n].Name` / `Icon` | string | — | The page button. |
+| `Pages[n].Content` | string | — | Wrapped text in a card. |
+| `Pages[n].Entries` | table | — | Cards with `Title`, `Tag` or `Date`, and `Changes` (a list) or `Content`. |
+| `Pages[n].Build` | function | — | `function(frame)` to fill the page yourself. |
 
 ---
 
@@ -150,7 +216,7 @@ Tab:CreateDivider()
 
 ## Label
 
-> A single muted line.
+> A single muted line. Can refresh itself.
 
 ```lua
 local Label = Tab:CreateLabel({
@@ -473,7 +539,7 @@ Clicking the selected row unchecks it. Lists longer than `SearchAfter` get a sea
 
 ## Input
 
-> A text box.
+> A text box that grows with what you type.
 
 ```lua
 local Input = Tab:CreateInput({
@@ -666,7 +732,6 @@ Airflow:Dialog({
     Content = "Pick one.",
     Icon = "list",
     CloseOnBackdrop = true,
-    OnCancel = function() end,
     Buttons = {
         { Title = "Later", Callback = function() end },
         { Title = "Now", Variant = "Primary", Callback = function() end },
@@ -716,16 +781,6 @@ local Window = Airflow:CreateWindow({
 -- create tabs and elements
 
 Window:LoadConfig()
-Window:LoadConfig("pvp", true)
-Window:SaveConfig("pvp")
-Window:DeleteConfig("pvp")
-local Names = Window:ListConfigs()
-
-local Manager = Tab:CreateConfigManager({ Name = "Configs" })
-Manager:Save("pvp")
-Manager:Load("pvp")
-Manager:Delete("pvp")
-Manager:Refresh()
 ```
 
 Requires `writefile` / `readfile`. Keybinds are stored by key name, colours as RGB components. Call `LoadConfig` after every element exists.
@@ -767,7 +822,7 @@ Tab:CreateButton({
 })
 ```
 
-Names resolve through the [Footagesus/Icons](https://github.com/Footagesus/Icons) list, fetched once on first use; `Airflow:PreloadIcons()` fetches it up front. `rbxassetid://` strings and `{ Image, RectOffset, RectSize }` tables also work.
+Names resolve through the [Footagesus/Icons](https://github.com/Footagesus/Icons) list, fetched once on first use; `Airflow:PreloadIcons()` fetches it up front.
 
 ---
 
@@ -789,7 +844,7 @@ Airflow:LoadFont({
 })
 ```
 
-Call it before `CreateWindow`. The TTFs are saved to the folder on first run and reused after that; a family file is generated and loaded through `getcustomasset`. Needs `writefile`, `isfile` and `getcustomasset`; without them the default Builder Sans stays. `ValleySans` is built in as a preset.
+Call it before `CreateWindow`. The TTFs are saved to the folder on first run and reused after that. Needs `writefile`, `isfile` and `getcustomasset`; without them the default Builder Sans stays.
 
 ### Properties
 
@@ -797,7 +852,7 @@ Call it before `CreateWindow`. The TTFs are saved to the folder on first run and
 | --- | --- | --- | --- |
 | `Name` | string | — | Family name. `"ValleySans"` uses the built-in URLs. |
 | `Folder` | string | `"AirFlowFonts"` | Where the TTFs and family file are saved. |
-| `Weights` | table | preset | `Regular`, `Medium`, `SemiBold`, `Bold` → TTF URL. Missing weights fall back to the nearest one. |
+| `Weights` | table | preset | `Regular`, `Medium`, `SemiBold`, `Bold` → TTF URL. |
 
 ---
 
@@ -832,20 +887,19 @@ Airflow.Assets.Shadow = "rbxassetid://6014261993"
 
 ### Properties
 
-| Name | Default | Description |
-| --- | --- | --- |
-| `Theme.Background` | `20, 16, 20` | Window, toast and dialog fill. |
-| `Theme.Surface` | `24, 19, 24` | Chips, text boxes, option rows. |
-| `Theme.Surface2` | `28, 22, 28` | Element cards, selected tab. |
-| `Theme.Surface3` | `42, 36, 43` | Toggle pill off, tracks. |
-| `Theme.Stroke` | `40, 32, 41` | Outlines at rest. |
-| `Theme.StrokeHover` | `88, 70, 90` | Outlines on hover, focus, open. |
-| `Theme.Accent` | `235, 199, 246` | Highlights, primary buttons, indicator, progress bars. |
-| `Theme.AccentDark` | `24, 18, 26` | Text on accent surfaces. |
-| `Theme.Text` | `233, 229, 234` | Primary text. |
-| `Theme.Muted` | `125, 115, 126` | Secondary text. |
-| `Theme.Success` / `Warning` / `Error` | — | Notification title tints. |
-| `Fonts.Regular` / `Medium` / `Bold` | Builder Sans | Body text / titles and chips / emphasis. Any Roblox font family works. |
-| `Assets.Logo` / `Glow` / `Shadow` | — | Header mark, glow decal, drop shadow. |
+| Name | Used for |
+| --- | --- |
+| `Background` | Window, toast and dialog fill. |
+| `Surface` | Chips, text boxes, option rows. |
+| `Surface2` | Element cards, selected tab. |
+| `Surface3` | Toggle pill off, tracks. |
+| `Stroke` | Outlines at rest. |
+| `StrokeHover` | Outlines on hover, focus, open. |
+| `Accent` | Highlights, primary buttons, indicator, progress bars. |
+| `AccentDark` | Text on accent surfaces. |
+| `Text` / `Muted` | Primary and secondary text. |
+| `Success` / `Warning` / `Error` | Notification title tints. |
+| `Fonts.Regular` / `Medium` / `Bold` | Body text / titles and chips / emphasis. |
+| `Assets.Logo` / `Glow` / `Shadow` | Header mark, glow decal, drop shadow. |
 
 `Airflow.Touch` is `true` on touch-only devices; cards, chips and hit areas are larger there automatically.
