@@ -63,12 +63,7 @@ local function finishElement(tab, opts, element, frame, kind)
             Library.Flags[opts.Flag] = nil
         end
         if window then
-            for index, control in ipairs(window._controls) do
-                if control == frame then
-                    table.remove(window._controls, index)
-                    break
-                end
-            end
+            window._controlsDirty = true
         end
         if frame then
             frame:Destroy()
@@ -600,7 +595,7 @@ local function card(tab, className, height, opts)
         props.Text = ""
     end
     local frame = create(className, props)
-    table.insert(tab.Window._controls, frame)
+    frame:SetAttribute("NoDrag", true)
     corner(frame)
     local frameStroke = stroke(frame, Theme.Stroke)
     return frame, frameStroke
@@ -2415,6 +2410,58 @@ for name, method in pairs(table.clone(Tab)) do
     end
 end
 
+local function detectExecutor()
+    local name
+    pcall(function()
+        if typeof(identifyexecutor) == "function" then
+            name = (identifyexecutor())
+        elseif typeof(getexecutorname) == "function" then
+            name = getexecutorname()
+        end
+    end)
+    if type(name) == "string" and #name > 0 then
+        return name
+    end
+    return RunService:IsStudio() and "Studio" or "Unknown"
+end
+
+local function detectGameName()
+    local ok, info = pcall(function()
+        return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+    end)
+    if ok and type(info) == "table" and info.Name then
+        return info.Name
+    end
+    return "Unknown game"
+end
+
+local REGION_NAMES = {
+    US = "United States", GB = "United Kingdom", DE = "Germany", FR = "France",
+    NL = "Netherlands", SG = "Singapore", JP = "Japan", AU = "Australia",
+    BR = "Brazil", IN = "India", HK = "Hong Kong", CA = "Canada",
+}
+
+local function detectRegion(callback)
+    task.spawn(function()
+        local requester = request or http_request or (syn and syn.request) or (http and http.request)
+        local region
+        if type(requester) == "function" then
+            pcall(function()
+                local response = requester({ Url = "https://ipinfo.io/json", Method = "GET" })
+                local body = type(response) == "table" and (response.Body or response.body) or nil
+                if type(body) == "string" then
+                    local data = HttpService:JSONDecode(body)
+                    if type(data) == "table" and data.country then
+                        local label = REGION_NAMES[data.country] or data.country
+                        region = data.city and (data.city .. ", " .. label) or label
+                    end
+                end
+            end)
+        end
+        callback(region or "Unavailable")
+    end)
+end
+
 local NOTIFY_COLORS = {
     Success = Theme.Success,
     Warning = Theme.Warning,
@@ -2430,7 +2477,7 @@ function Library.Window(_, opts)
     if type(opts.Keybind) == "string" then
         opts.Keybind = Enum.KeyCode[opts.Keybind]
     end
-    local size = opts.Size or UDim2.fromOffset(640, 420)
+    local size = opts.Size or UDim2.fromOffset(640, 480)
     local keybind = opts.Keybind or Enum.KeyCode.RightControl
 
     local self = setmetatable({
@@ -2440,7 +2487,8 @@ function Library.Window(_, opts)
         Keybind = keybind,
         _connections = {},
         _controls = {},
-        _inputListeners = { Began = {}, Changed = {}, Ended = {} },
+        _inputListeners = { Began = {}, Changed = {}, Ended = {}, Render = {} },
+        _frameSteps = {},
         _destroyed = false,
     }, Window)
     local function dispatch(kind)
@@ -2450,6 +2498,13 @@ function Library.Window(_, opts)
             end
         end
     end
+    local renderDispatch = dispatch("Render")
+    table.insert(self._connections, RunService.RenderStepped:Connect(function(deltaTime)
+        renderDispatch(deltaTime)
+        for _, step in ipairs(self._frameSteps) do
+            step(deltaTime)
+        end
+    end))
     table.insert(self._connections, UserInputService.InputBegan:Connect(dispatch("Began")))
     table.insert(self._connections, UserInputService.InputChanged:Connect(dispatch("Changed")))
     table.insert(self._connections, UserInputService.InputEnded:Connect(dispatch("Ended")))
@@ -2583,7 +2638,7 @@ function Library.Window(_, opts)
     corner(indicator, UDim.new(1, 0))
     self.Indicator = indicator
     local lastCanvasY = tabList.CanvasPosition.Y
-    table.insert(self._connections, RunService.RenderStepped:Connect(function()
+    table.insert(self._frameSteps, function()
         local canvasY = tabList.CanvasPosition.Y
         if canvasY == lastCanvasY or not self.CurrentTab or not self._introDone then
             return
@@ -2594,7 +2649,7 @@ function Library.Window(_, opts)
         local bottom = top + tabList.AbsoluteSize.Y / self.Scale.Scale
         indicator.Visible = targetY > top and targetY < bottom
         indicator.Position = UDim2.fromOffset(6, targetY)
-    end))
+    end)
 
     local footer = create("Frame", {
         Position = UDim2.new(0, 22, 1, -36),
@@ -2671,14 +2726,13 @@ function Library.Window(_, opts)
         Text = "×",
         TextColor3 = Theme.Muted,
         TextSize = 26,
-        FontFace = Fonts.Medium,
+        FontFace = Fonts.Bold,
         AutoButtonColor = false,
         ZIndex = 5,
         Parent = content,
     })
     padding(closeButton, 0, 0, 1, 0)
     corner(closeButton, UDim.new(0, 8))
-    table.insert(self._controls, closeButton)
     closeButton.MouseEnter:Connect(function()
         tween(closeButton, { BackgroundTransparency = 0, TextColor3 = Theme.Text }, 0.15)
     end)
@@ -2712,10 +2766,18 @@ function Library.Window(_, opts)
     self._toasts = {}
     self.MaxNotifications = opts.MaxNotifications or 4
 
+    self._controlsDirty = true
+    table.insert(self._connections, body.DescendantAdded:Connect(function()
+        self._controlsDirty = true
+    end))
+    table.insert(self._connections, body.DescendantRemoving:Connect(function()
+        self._controlsDirty = true
+    end))
+
     self:_enableDrag()
     self.MaxSize = opts.MaxSize
     self.KeepOnScreen = opts.KeepOnScreen ~= false
-    self:_enableResize(opts.MinSize or Vector2.new(480, 320))
+    self:_enableResize(opts.MinSize or Vector2.new(480, 360))
 
     local saving = opts.ConfigurationSaving
     if type(saving) == "table" and saving.Enabled ~= false then
@@ -2766,6 +2828,10 @@ function Library.Window(_, opts)
     self._introDone = false
 
     table.insert(Library.Windows, self)
+
+    if opts.Home then
+        self:_buildHome(type(opts.Home) == "table" and opts.Home or {})
+    end
 
     local loading = opts.Loading
     if type(loading) == "table" then
@@ -2831,9 +2897,23 @@ local function isShown(object, stopAt, point)
     return true
 end
 
+function Window:_refreshControls()
+    local controls = {}
+    for _, object in ipairs(self.Body:GetDescendants()) do
+        if object:IsA("GuiButton") or object:IsA("TextBox") or object:GetAttribute("NoDrag") then
+            table.insert(controls, object)
+        end
+    end
+    self._controls = controls
+    self._controlsDirty = false
+end
+
 function Window:_overControl(point)
     if self._dialog then
         return true
+    end
+    if self._controlsDirty then
+        self:_refreshControls()
     end
     for _, object in ipairs(self._controls) do
         if object.Parent and pointInside(point, object) and isShown(object, self.Body, point) then
@@ -2879,7 +2959,7 @@ function Window:_enableDrag()
         end
     end))
 
-    table.insert(self._connections, RunService.RenderStepped:Connect(function(deltaTime)
+    table.insert(self._frameSteps, function(deltaTime)
         if not dragging then
             return
         end
@@ -2888,10 +2968,13 @@ function Window:_enableDrag()
         local alpha = 1 - math.exp(-deltaTime * 45)
         local step = current:Lerp(target, alpha)
         self.Root.Position = UDim2.fromOffset(step.X, step.Y)
-    end))
+    end)
 end
 
-local function popIn(object, delay)
+local function popIn(object, delay, force)
+    if not object.Visible and not force then
+        return
+    end
     object.Visible = false
     task.delay(delay, function()
         if not object.Parent then
@@ -2951,7 +3034,7 @@ function Window:_playIntro(morph)
     end
 
     for index, tab in ipairs(self.Tabs) do
-        popIn(tab._button, 0.1 + index * 0.05)
+        popIn(tab._button, 0.1 + index * 0.05, true)
     end
     self.Indicator.Visible = false
     task.delay(0.15 + #self.Tabs * 0.05, function()
@@ -3254,7 +3337,6 @@ function Window:_enableResize(minSize)
         Parent = grip,
     })
 
-    table.insert(self._controls, grip)
     local resizing = false
     local initialSize = self.Root.Size
     local initialPointer = Vector2.zero
@@ -3290,7 +3372,7 @@ function Window:_enableResize(minSize)
             self:_clampToScreen()
         end
     end))
-    table.insert(self._connections, RunService.RenderStepped:Connect(function(deltaTime)
+    table.insert(self._frameSteps, function(deltaTime)
         if not resizing then
             return
         end
@@ -3306,7 +3388,7 @@ function Window:_enableResize(minSize)
         if step ~= current then
             self.Root.Size = UDim2.fromOffset(step.X, step.Y)
         end
-    end))
+    end)
 end
 
 local function configPath(self, name)
@@ -3442,6 +3524,523 @@ function Window:_autoSave()
     end)
 end
 
+local function statRow(parent, order, icon, title)
+    local card = create("Frame", {
+        Size = UDim2.new(0.5, -4, 0, 62),
+        BackgroundColor3 = Theme.Surface2,
+        BorderSizePixel = 0,
+        LayoutOrder = order,
+        Parent = parent,
+    })
+    corner(card)
+    stroke(card)
+    card:SetAttribute("NoDrag", true)
+    if icon then
+        glowIcon(card, icon, Theme.Muted, UDim2.new(0, 14, 0, 21))
+    end
+    label({
+        Position = UDim2.fromOffset(icon and 36 or 14, 12),
+        Size = UDim2.new(1, -(icon and 50 or 28), 0, 16),
+        Text = title,
+        TextSize = 12,
+        TextColor3 = Theme.Muted,
+        Parent = card,
+    })
+    return label({
+        Position = UDim2.fromOffset(14, 34),
+        Size = UDim2.new(1, -28, 0, 18),
+        Text = "…",
+        TextSize = 15,
+        Parent = card,
+    })
+end
+
+local function emptyState(parent, icon, text)
+    local holder = create("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, -10),
+        Size = UDim2.fromOffset(200, 70),
+        BackgroundTransparency = 1,
+        Parent = parent,
+    })
+    local image = create("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, 0),
+        Size = UDim2.fromOffset(26, 26),
+        BackgroundTransparency = 1,
+        ImageColor3 = Theme.Muted,
+        ImageTransparency = 0.15,
+        ScaleType = Enum.ScaleType.Fit,
+        Parent = holder,
+    })
+    applyIcon(image, icon)
+    local caption = label({
+        Position = UDim2.fromOffset(0, 36),
+        Size = UDim2.new(1, 0, 0, 16),
+        Text = text,
+        TextSize = 13,
+        FontFace = Fonts.Regular,
+        TextColor3 = Theme.Muted,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        Parent = holder,
+    })
+    return holder, caption, image
+end
+
+-- fade a card in without a CanvasGroup, so nothing gets clipped
+local function fadeCard(card)
+    local parts = {}
+    local function collect(object)
+        for _, child in ipairs(object:GetChildren()) do
+            if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox") then
+                table.insert(parts, { child, "TextTransparency", child.TextTransparency })
+            elseif child:IsA("ImageLabel") or child:IsA("ImageButton") then
+                table.insert(parts, { child, "ImageTransparency", child.ImageTransparency })
+            elseif child:IsA("UIStroke") then
+                table.insert(parts, { child, "Transparency", child.Transparency })
+            elseif child:IsA("Frame") then
+                table.insert(parts, { child, "BackgroundTransparency", child.BackgroundTransparency })
+            end
+            collect(child)
+        end
+    end
+    if card:IsA("Frame") then
+        table.insert(parts, { card, "BackgroundTransparency", card.BackgroundTransparency })
+    end
+    collect(card)
+    for _, part in ipairs(parts) do
+        part[1][part[2]] = 1
+        tween(part[1], { [part[2]] = part[3] }, 0.28)
+    end
+end
+
+local function fadeSlideIn(group, restY)
+    restY = restY or 0
+    group.GroupTransparency = 1
+    group.Position = UDim2.fromOffset(0, restY + 14)
+    group.Visible = true
+    tween(group, { GroupTransparency = 0, Position = UDim2.fromOffset(0, restY) }, 0.32, Enum.EasingStyle.Quint)
+end
+
+function Window:_buildHome(opts)
+    local tab = self:Tab({
+        Name = opts.Name or "Home",
+        Desc = opts.Desc,
+        Icon = opts.Icon or "layout-dashboard",
+    })
+    local list = tab.List
+
+    local pages = opts.Pages or opts.Tabs
+    local panels = {}
+    local strip = nil
+    if type(pages) == "table" and #pages > 0 then
+        strip = create("Frame", {
+            Size = UDim2.new(1, 0, 0, 32),
+            BackgroundTransparency = 1,
+            LayoutOrder = 1,
+            Parent = list,
+        })
+        create("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Padding = UDim.new(0, 6),
+            Parent = strip,
+        })
+    end
+
+    local greeting = opts.Greeting
+    if greeting == nil then
+        local hour = tonumber(os.date("%H")) or 12
+        local part = hour < 12 and "morning" or (hour < 18 and "afternoon" or "evening")
+        greeting = "Good " .. part .. "."
+    end
+    local header = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 72),
+        BackgroundColor3 = Theme.Surface2,
+        BorderSizePixel = 0,
+        LayoutOrder = 2,
+        Parent = list,
+    })
+    header:SetAttribute("NoDrag", true)
+    corner(header)
+    stroke(header)
+    local avatar = create("ImageLabel", {
+        Position = UDim2.fromOffset(14, 14),
+        Size = UDim2.fromOffset(44, 44),
+        BackgroundColor3 = Theme.Surface,
+        BorderSizePixel = 0,
+        Parent = header,
+    })
+    corner(avatar, UDim.new(0, 8))
+    stroke(avatar)
+    task.spawn(function()
+        local ok, url = pcall(function()
+            return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+        end)
+        if ok and url then
+            avatar.Image = url
+        end
+    end)
+    label({
+        Position = UDim2.fromOffset(70, 18),
+        Size = UDim2.new(1, -84, 0, 18),
+        Text = (opts.Welcome or "Hello, ") .. LocalPlayer.DisplayName,
+        TextSize = 15,
+        Parent = header,
+    })
+    label({
+        Position = UDim2.fromOffset(70, 38),
+        Size = UDim2.new(1, -84, 0, 16),
+        Text = greeting,
+        TextSize = 13,
+        FontFace = Fonts.Regular,
+        TextColor3 = Theme.Muted,
+        Parent = header,
+    })
+
+    local infoPanel = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        LayoutOrder = 3,
+        Parent = list,
+    })
+    create("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 8),
+        Parent = infoPanel,
+    })
+
+    if opts.Sections ~= false then
+        local heading = create("Frame", {
+            Size = UDim2.new(1, 0, 0, 24),
+            BackgroundTransparency = 1,
+            LayoutOrder = 1,
+            Parent = infoPanel,
+        })
+        local headingText = label({
+            Position = UDim2.fromOffset(2, 6),
+            Size = UDim2.new(0, 0, 0, 16),
+            AutomaticSize = Enum.AutomaticSize.X,
+            Text = string.upper(opts.SectionName or "System info"),
+            TextSize = 12,
+            TextColor3 = Theme.Muted,
+            TextTruncate = Enum.TextTruncate.None,
+            Parent = heading,
+        })
+        local rule = create("Frame", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, 0, 0, 14),
+            Size = UDim2.new(1, -12, 0, 1),
+            BackgroundColor3 = Theme.Stroke,
+            BorderSizePixel = 0,
+            Parent = heading,
+        })
+        local function fitRule()
+            rule.Size = UDim2.new(1, -(headingText.AbsoluteSize.X + 14), 0, 1)
+        end
+        headingText:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitRule)
+        task.defer(fitRule)
+    end
+
+    local grid = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        LayoutOrder = 2,
+        Parent = infoPanel,
+    })
+    create("UIGridLayout", {
+        CellSize = UDim2.new(0.5, -4, 0, 62),
+        CellPadding = UDim2.fromOffset(8, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = grid,
+    })
+
+    local show = opts.Stats or { "FPS", "Ping", "Executor", "Game", "Region", "Time" }
+    local enabled = {}
+    for _, name in ipairs(show) do
+        enabled[name] = true
+    end
+    local order = 0
+    local function add(name, icon, title)
+        if not enabled[name] then
+            return nil
+        end
+        order += 1
+        return statRow(grid, order, icon, title)
+    end
+
+    local fpsValue = add("FPS", "activity", "FPS")
+    local pingValue = add("Ping", "wifi", "Ping")
+    local executorValue = add("Executor", "terminal", "Executor")
+    local gameValue = add("Game", "gamepad-2", "Game")
+    local regionValue = add("Region", "globe", "Server region")
+    local timeValue = add("Time", "clock", "Time of day")
+    local playersValue = add("Players", "users", "Players")
+    local uptimeValue = add("Uptime", "timer", "Session")
+
+    if executorValue then
+        executorValue.Text = detectExecutor()
+    end
+    if gameValue then
+        gameValue.Text = "Loading"
+        task.spawn(function()
+            gameValue.Text = detectGameName()
+        end)
+    end
+    if regionValue then
+        regionValue.Text = "Loading"
+        detectRegion(function(region)
+            regionValue.Text = region
+        end)
+    end
+
+    local frames = 0
+    local started = os.clock()
+    self:_listen("Render", function()
+        frames += 1
+    end)
+    task.spawn(function()
+        while not self._destroyed and tab.List.Parent and tab._page.Parent do
+            if not self.Open or self.CurrentTab ~= tab then
+                frames = 0
+                task.wait(1)
+                continue
+            end
+            if fpsValue then
+                fpsValue.Text = tostring(frames)
+            end
+            frames = 0
+            if pingValue then
+                local ok, ping = pcall(function()
+                    return math.floor(LocalPlayer:GetNetworkPing() * 1000)
+                end)
+                pingValue.Text = (ok and ping or 0) .. " ms"
+            end
+            if timeValue then
+                timeValue.Text = os.date(opts.TimeFormat or "%H:%M")
+            end
+            if playersValue then
+                playersValue.Text = #Players:GetPlayers() .. " / " .. Players.MaxPlayers
+            end
+            if uptimeValue then
+                local elapsed = math.floor(os.clock() - started)
+                uptimeValue.Text = string.format("%d:%02d", math.floor(elapsed / 60), elapsed % 60)
+            end
+            task.wait(1)
+        end
+    end)
+
+    table.insert(panels, { Title = opts.SectionName or "Details", Icon = opts.TabIcon or "layout-grid", Frame = infoPanel })
+
+    if strip then
+        for _, page in ipairs(pages) do
+            local panel = create("Frame", {
+                Size = UDim2.new(1, 0, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                Visible = false,
+                LayoutOrder = 3,
+                Parent = list,
+            })
+            create("UIListLayout", {
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Padding = UDim.new(0, 8),
+                Parent = panel,
+            })
+            if type(page.Content) == "string" then
+                local card = create("Frame", {
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    BackgroundColor3 = Theme.Surface2,
+                    BorderSizePixel = 0,
+                    LayoutOrder = 1,
+                    Parent = panel,
+                })
+                card:SetAttribute("NoDrag", true)
+                corner(card)
+                stroke(card)
+                padding(card, 14, 14, 12, 14)
+                label({
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    Text = page.Content,
+                    TextSize = 13,
+                    FontFace = Fonts.Regular,
+                    TextColor3 = Theme.Muted,
+                    TextWrapped = true,
+                    TextTruncate = Enum.TextTruncate.None,
+                    TextYAlignment = Enum.TextYAlignment.Top,
+                    Parent = card,
+                })
+            end
+            if type(page.Entries) == "table" then
+                for index, entry in ipairs(page.Entries) do
+                    local card = create("Frame", {
+                        Size = UDim2.new(1, 0, 0, 0),
+                        AutomaticSize = Enum.AutomaticSize.Y,
+                        BackgroundColor3 = Theme.Surface2,
+                        BorderSizePixel = 0,
+                        LayoutOrder = index,
+                        Parent = panel,
+                    })
+                    card:SetAttribute("NoDrag", true)
+                    corner(card)
+                    stroke(card)
+                    padding(card, 14, 14, 12, 14)
+                    create("UIListLayout", {
+                        SortOrder = Enum.SortOrder.LayoutOrder,
+                        Padding = UDim.new(0, 4),
+                        Parent = card,
+                    })
+                    local head = create("Frame", {
+                        Size = UDim2.new(1, 0, 0, 18),
+                        BackgroundTransparency = 1,
+                        LayoutOrder = 1,
+                        Parent = card,
+                    })
+                    label({
+                        Size = UDim2.new(1, -70, 1, 0),
+                        Text = entry.Title or entry.Version or "Update",
+                        TextSize = 14,
+                        Parent = head,
+                    })
+                    if entry.Date or entry.Tag then
+                        local chip = create("Frame", {
+                            AnchorPoint = Vector2.new(1, 0.5),
+                            Position = UDim2.new(1, 0, 0.5, 0),
+                            Size = UDim2.fromOffset(0, 20),
+                            AutomaticSize = Enum.AutomaticSize.X,
+                            BackgroundColor3 = Theme.Surface,
+                            BorderSizePixel = 0,
+                            Parent = head,
+                        })
+                        corner(chip, UDim.new(0, 5))
+                        stroke(chip)
+                        padding(chip, 8, 8)
+                        label({
+                            Size = UDim2.new(0, 0, 1, 0),
+                            AutomaticSize = Enum.AutomaticSize.X,
+                            Text = entry.Tag or entry.Date,
+                            TextSize = 11,
+                            TextColor3 = Theme.Muted,
+                            TextTruncate = Enum.TextTruncate.None,
+                            Parent = chip,
+                        })
+                    end
+                    local body = entry.Content or entry.Body
+                    if type(entry.Changes) == "table" then
+                        body = "• " .. table.concat(entry.Changes, "\n• ")
+                    end
+                    if body then
+                        label({
+                            Size = UDim2.new(1, 0, 0, 0),
+                            AutomaticSize = Enum.AutomaticSize.Y,
+                            Text = body,
+                            TextSize = 13,
+                            FontFace = Fonts.Regular,
+                            TextColor3 = Theme.Muted,
+                            TextWrapped = true,
+                            TextTruncate = Enum.TextTruncate.None,
+                            TextYAlignment = Enum.TextYAlignment.Top,
+                            LayoutOrder = 2,
+                            Parent = card,
+                        })
+                    end
+                end
+            end
+            if type(page.Build) == "function" then
+                safeCall(page.Build, panel)
+                for _, child in ipairs(panel:GetChildren()) do
+                    if child:IsA("GuiObject") then
+                        child:SetAttribute("NoDrag", true)
+                    end
+                end
+            end
+            table.insert(panels, { Title = page.Name or page.Title or "Page", Icon = page.Icon, Frame = panel })
+        end
+
+        local buttons = {}
+        local function select(index, instant)
+            local changed = self._homeIndex ~= index
+            self._homeIndex = index
+            header.Visible = index == 1
+            if index == 1 and changed and not instant then
+                fadeCard(header)
+            end
+            for position, entry in ipairs(panels) do
+                local on = position == index
+                local frame = entry.Frame
+                frame.Visible = on
+                if on and changed and not instant then
+                    for _, child in ipairs(frame:GetChildren()) do
+                        if child:IsA("GuiObject") then
+                            fadeCard(child)
+                        end
+                    end
+                end
+                local button = buttons[position]
+                if button then
+                    tween(button.Frame, { BackgroundTransparency = on and 0 or 1 }, 0.15)
+                    tween(button.Stroke, { Transparency = on and 0 or 1 }, 0.15)
+                    tween(button.Label, { TextColor3 = on and Theme.Text or Theme.Muted }, 0.15)
+                    if button.Icon then
+                        tween(button.Icon, { ImageColor3 = on and Theme.Accent or Theme.Muted }, 0.15)
+                    end
+                end
+            end
+        end
+        for index, entry in ipairs(panels) do
+            local button = create("TextButton", {
+                Size = UDim2.fromOffset(0, 32),
+                AutomaticSize = Enum.AutomaticSize.X,
+                BackgroundColor3 = Theme.Surface2,
+                BackgroundTransparency = 1,
+                Text = "",
+                AutoButtonColor = false,
+                LayoutOrder = index,
+                Parent = strip,
+            })
+            corner(button, UDim.new(0, 7))
+            local buttonStroke = stroke(button, Theme.Stroke, 1)
+            padding(button, 12, 12)
+            local iconImage
+            if entry.Icon then
+                iconImage = create("ImageLabel", {
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    Position = UDim2.new(0, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(14, 14),
+                    BackgroundTransparency = 1,
+                    ImageColor3 = Theme.Muted,
+                    ScaleType = Enum.ScaleType.Fit,
+                    Parent = button,
+                })
+                applyIcon(iconImage, entry.Icon)
+            end
+            local text = label({
+                Position = UDim2.fromOffset(iconImage and 20 or 0, 0),
+                Size = UDim2.new(0, 0, 1, 0),
+                AutomaticSize = Enum.AutomaticSize.X,
+                Text = entry.Title,
+                TextSize = 13,
+                TextColor3 = Theme.Muted,
+                TextTruncate = Enum.TextTruncate.None,
+                Parent = button,
+            })
+            buttons[index] = { Frame = button, Stroke = buttonStroke, Label = text, Icon = iconImage }
+            button.MouseButton1Click:Connect(function()
+                select(index)
+            end)
+        end
+        select(1)
+    end
+
+    tab._order = 10
+    self.Home = tab
+    return tab
+end
+
 function Window:Tab(opts, icon)
     opts = normalize(opts, { Title = "Name", Description = "Desc" })
     if icon ~= nil and opts.Icon == nil then
@@ -3465,7 +4064,6 @@ function Window:Tab(opts, icon)
     corner(button)
     local buttonStroke = stroke(button, Theme.Stroke, 1)
     tab._button = button
-    table.insert(self._controls, button)
 
     local hasIcon = opts.Icon ~= nil
     if hasIcon then
@@ -3536,34 +4134,7 @@ function Window:Tab(opts, icon)
     })
     tab.List = list
 
-    local empty = create("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.new(0.5, 0, 0.5, -10),
-        Size = UDim2.fromOffset(200, 70),
-        BackgroundTransparency = 1,
-        Parent = page,
-    })
-    local emptyIcon = create("ImageLabel", {
-        AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, 0),
-        Size = UDim2.fromOffset(26, 26),
-        BackgroundTransparency = 1,
-        ImageColor3 = Theme.Muted,
-        ImageTransparency = 0.15,
-        ScaleType = Enum.ScaleType.Fit,
-        Parent = empty,
-    })
-    applyIcon(emptyIcon, opts.Icon or "layout-grid")
-    label({
-        Position = UDim2.fromOffset(0, 36),
-        Size = UDim2.new(1, 0, 0, 16),
-        Text = opts.EmptyText or "Nothing here yet",
-        TextSize = 13,
-        FontFace = Fonts.Regular,
-        TextColor3 = Theme.Muted,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        Parent = empty,
-    })
+    local empty = emptyState(page, opts.Icon or "layout-grid", opts.EmptyText or "Nothing here yet")
     local elementCount = 0
     list.ChildAdded:Connect(function(child)
         if child:IsA("GuiObject") then
@@ -3573,7 +4144,7 @@ function Window:Tab(opts, icon)
     end)
     list.ChildRemoved:Connect(function(child)
         if child:IsA("GuiObject") then
-            elementCount -= 1
+            elementCount = math.max(elementCount - 1, 0)
             empty.Visible = elementCount <= 0
         end
     end)
@@ -3908,15 +4479,11 @@ function Window:SelectTab(tab)
     self:_placeIndicator(tab)
 
     local page = tab._page
-    local inLayer = self._inLayer
     page.Position = UDim2.fromOffset(0, 0)
     page.Visible = true
-    page.Parent = inLayer
+    page.Parent = self._inLayer
     self._inPage = page
-    inLayer.GroupTransparency = 1
-    inLayer.Position = UDim2.fromOffset(0, 14)
-    inLayer.Visible = true
-    tween(inLayer, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) }, 0.32, Enum.EasingStyle.Quint)
+    fadeSlideIn(self._inLayer)
     task.delay(0.32, function()
         if self._transitionGeneration == generation then
             self:_settleIn()
@@ -4065,7 +4632,7 @@ function Window:Notify(opts)
         Text = "×",
         TextColor3 = Theme.Muted,
         TextSize = 22,
-        FontFace = Fonts.Medium,
+        FontFace = Fonts.Bold,
         AutoButtonColor = false,
         Parent = inner,
     })
@@ -4179,10 +4746,6 @@ function Window:Destroy()
     end)
 end
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-
 local Airflow = Library
 
 Airflow:LoadFont({ Name = "ValleySans" }) -- downloads the font once into workspace/AirFlowFonts and uses it everywhere
@@ -4194,6 +4757,25 @@ local Window = Airflow:CreateWindow({
     -- examples: "RightShift", "RightControl", "LeftAlt", "Insert", "Home", "F1", "Backquote"
     -- Enum.KeyCode values also work: ToggleUIKeybind = Enum.KeyCode.RightShift
     ConfigurationSaving = { Enabled = true, FolderName = "AirflowExample", FileName = "default" },
+    Home = {
+        Name = "Home",
+        Stats = { "FPS", "Ping", "Executor", "Game", "Region", "Time" },
+        Pages = { -- extra tabs beside the info one
+            {
+                Name = "Changelog",
+                Icon = "scroll-text",
+                Entries = {
+                    { Title = "v1.2", Tag = "Latest", Changes = { "Added the home tab", "Smaller input boxes that grow", "Faster dropdowns" } },
+                    { Title = "v1.1", Tag = "Aug 30", Changes = { "Config manager", "Stepper and progress elements" } },
+                },
+            },
+            {
+                Name = "Info",
+                Icon = "info",
+                Content = "Airflow UI example. Everything on the Elements tab just prints, so you can click around safely.",
+            },
+        },
+    }
 })
 
 local Elements = Window:CreateTab({ Name = "Elements", Desc = "One of everything", Icon = "layout-grid" })
@@ -4354,40 +4936,6 @@ Popups:CreateButton({
                 { Title = "Three", Variant = "Primary", Callback = function() print("three") end },
             },
         })
-    end,
-})
-
-local Info = Window:CreateTab({ Name = "Info", Desc = "Session", Icon = "activity" })
-
-Info:CreateSection("Session")
-
-Info:CreateLabel({
-    Text = "Players: 0",
-    UpdateRate = 2, -- seconds between refreshes
-    Update = function()
-        return "Players: " .. #Players:GetPlayers()
-    end,
-})
-
-local Frames = 0
-RunService.RenderStepped:Connect(function()
-    Frames += 1
-end)
-Info:CreateLabel({
-    Text = "FPS: 0",
-    UpdateRate = 1,
-    Update = function()
-        local Count = Frames
-        Frames = 0
-        return "FPS: " .. Count
-    end,
-})
-
-Info:CreateLabel({
-    Text = "Ping: 0 ms",
-    UpdateRate = 1,
-    Update = function()
-        return "Ping: " .. math.floor(LocalPlayer:GetNetworkPing() * 1000) .. " ms"
     end,
 })
 
