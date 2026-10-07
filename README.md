@@ -39,7 +39,6 @@ Window:LoadConfig()
 - Elements: [Section](#section) · [Divider](#divider) · [Label](#label) · [Paragraph](#paragraph) · [Button](#button) · [Toggle](#toggle) · [Slider](#slider) · [Stepper](#stepper) · [Progress](#progress) · [Dropdown](#dropdown) · [Input](#input) · [Keybind](#keybind) · [Color Picker](#color-picker)
 - [Notification](#notification) · [Confirm and Dialog](#confirm-and-dialog)
 - [Themes](#themes) · [Flags](#flags) · [Configs](#configs) · [Icons](#icons) · [Fonts](#fonts) · [Assets](#assets)
-- [Upgrading from 1.2](#upgrading-from-12) · [Building](#building)
 
 ### Conventions
 
