@@ -1,24 +1,65 @@
 # Airflow UI
 
-> A UI library for Roblox. Windows, tabs and thirteen elements with lucide icons and eased motion.
+> A UI library for Roblox. Windows, tabs and thirteen elements with lucide icons, eased motion and live themes.
 
 ```lua
 local Airflow = loadstring(game:HttpGet("https://raw.githubusercontent.com/PookiePepelsss/Airflow-UI/refs/heads/main/Source.luau"))()
 ```
 
-Every constructor also works without the `Create` prefix. `Tab:Toggle` is the same as `Tab:CreateToggle`. Every element handle also has `Destroy()`, which removes the card, its listeners and its flag.
+## Quick start
+
+```lua
+local Airflow = loadstring(game:HttpGet("https://raw.githubusercontent.com/PookiePepelsss/Airflow-UI/refs/heads/main/Source.luau"))()
+
+local Window = Airflow:CreateWindow({
+    Name = "My Hub",
+    Theme = "Midnight",
+    ConfigurationSaving = { Enabled = true, FolderName = "MyHub" },
+})
+
+local Main = Window:CreateTab({ Name = "Main", Icon = "zap" })
+
+Main:CreateToggle({
+    Name = "Auto sprint",
+    Flag = "AutoSprint",
+    Callback = function(Value)
+        print("Auto sprint:", Value)
+    end,
+})
+
+Window:LoadConfig()
+```
+
+[`Example.luau`](Example.luau) builds one of everything. It contains the full readable library followed by the demo, so it runs on its own without fetching `Source.luau`.
+
+## Contents
+
+- [Window](#window) · [Home](#home) · [Tab](#tab)
+- [Every element](#every-element) — options and methods all elements share
+- Elements: [Section](#section) · [Divider](#divider) · [Label](#label) · [Paragraph](#paragraph) · [Button](#button) · [Toggle](#toggle) · [Slider](#slider) · [Stepper](#stepper) · [Progress](#progress) · [Dropdown](#dropdown) · [Input](#input) · [Keybind](#keybind) · [Color Picker](#color-picker)
+- [Notification](#notification) · [Confirm and Dialog](#confirm-and-dialog)
+- [Themes](#themes) · [Flags](#flags) · [Configs](#configs) · [Icons](#icons) · [Fonts](#fonts) · [Assets](#assets)
+- [Upgrading from 1.2](#upgrading-from-12) · [Building](#building)
+
+### Conventions
+
+- Every constructor works with or without the `Create` prefix: `Tab:Toggle` is `Tab:CreateToggle`.
+- Option names have aliases so Rayfield-style scripts work unchanged: `Title` → `Name`, `Description` → `Desc`, `CurrentValue` / `Value` → `Default`, `Increment` → `Step`, `Range = { min, max }` → `Min` / `Max`.
+- `Set(value, skipCallback)` on any element changes its value and fires its callback unless the second argument is `true`.
+- Callbacks run protected. An error inside one prints a `[AirFlow] callback error` warning instead of breaking the UI.
 
 ---
 
 ## Window
 
-> The root container. Sidebar with tabs, a content area, the close button and the notification stack.
+> The root container: a sidebar of tabs, the content area, a close button and the notification stack.
 
 ```lua
 local Window = Airflow:CreateWindow({
     Name = "Airflow",
     LoadingSubtitle = "by Pookie",
     Icon = "wind",
+    Theme = "Default",
     ToggleUIKeybind = "RightControl",
     Size = UDim2.fromOffset(640, 480),
     MinSize = Vector2.new(480, 360),
@@ -38,69 +79,52 @@ local Window = Airflow:CreateWindow({
         FolderName = "MyHub",
         FileName = "default",
     },
-    Home = {
-        Name = "Home",
-        Welcome = "Hello, ",
-        Stats = { "FPS", "Ping", "Executor", "Game", "Region", "Time" },
-        Pages = {
-            {
-                Name = "Changelog",
-                Icon = "scroll-text",
-                Entries = {
-                    { Title = "v1.2", Tag = "Latest", Changes = { "Added the home tab", "Faster dropdowns" } },
-                },
-            },
-            { Name = "Info", Icon = "info", Content = "Any text you want on its own tab." },
-        },
-    },
+    Home = { Name = "Home" },
     Parent = game:GetService("CoreGui"),
 })
-
-Window:Toggle(false)
 ```
 
-Drag any empty area to move it and the grip in the bottom-right corner to resize it. It scales itself down on small screens and stays inside the viewport.
+Drag any empty area to move the window and the grip in the bottom-right corner to resize it. It scales down on small screens and stays inside the viewport.
 
-### Properties
+### Options
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Name` | string | `"Airflow"` | Title in the sidebar header. Also names the ScreenGui. |
 | `LoadingSubtitle` | string | — | Small line under the title. |
-| `Icon` | string \| table | bird logo | Lucide name, `rbxassetid://` string, or `{ Image, RectOffset, RectSize }`. |
-| `ToggleUIKeybind` | string \| KeyCode | `"RightControl"` | Hides and shows the window. `"RightShift"`, `"LeftAlt"`, `"Insert"`, `"F1"`, or an `Enum.KeyCode`. |
-| `Size` | UDim2 | `640 × 480` | Starting size. |
+| `Icon` | string \| table | bird logo | See [Icons](#icons). |
+| `Theme` | string \| table | current theme | Applied before the window is built. See [Themes](#themes). |
+| `ToggleUIKeybind` | string \| KeyCode | `"RightControl"` | Hides and shows the window. An unknown name warns and falls back to the default. |
+| `Size` | UDim2 | `640 × 480` | Starting size in offsets. Screen fitting and the resize grip only read the offset part. |
 | `MinSize` | Vector2 | `480 × 360` | Smallest size the resize grip allows. |
 | `MaxSize` | Vector2 | unlimited | Largest size the resize grip allows. |
-| `MaxNotifications` | number | `4` | Oldest toast is dismissed past this. |
+| `MaxNotifications` | number | `4` | The oldest toast is dismissed past this. |
 | `KeepOnScreen` | boolean | `true` | Nudge the window back inside the viewport after a drag, resize or screen change. |
-| `OpenButton` | boolean \| table | touch-only devices | Floating pill that reopens the window. `true` / `false` to force, `{ Title, Icon }` to customise. |
+| `OpenButton` | boolean \| table | touch-only devices | Floating pill that reopens the window. `true` / `false` forces it, `{ Title, Icon }` customises it. |
 | `Loading` | boolean \| table | `true` | Loading card before the window morphs in. `false` skips it. |
-| `Loading.Title` | string | `Name` | Title on the card. |
-| `Loading.Text` | string | `LoadingSubtitle` | First status line. |
-| `Loading.Steps` | table | 3 built-in lines | Status lines cycled over the duration. |
-| `Loading.Duration` | number | `1.6` | Seconds before the window appears. |
+| `Loading.Title` / `Text` / `Steps` / `Duration` | — | `Name` / `LoadingSubtitle` / 3 lines / `1.6` | Card title, first status line, status lines cycled over the duration, seconds before the window appears. |
 | `ConfigurationSaving` | table | — | See [Configs](#configs). |
 | `Home` | boolean \| table | — | Adds a first tab with a greeting and live session stats. See [Home](#home). |
-| `Parent` | Instance | `gethui()` / CoreGui | Where the ScreenGui goes. Falls back to PlayerGui. |
+| `Parent` | Instance | `gethui()` → CoreGui → PlayerGui | Where the ScreenGui goes. |
 
 ### Handle
 
 | Member | Description |
 | --- | --- |
 | `.Open` | Whether the window is shown. |
-| `.CurrentTab` | The selected tab. |
-| `.Tabs` | Array of tabs. |
+| `.CurrentTab` / `.Tabs` | The selected tab and the array of all tabs. |
 | `.Home` | The home tab, when one was created. |
-| `Toggle(open?)` | Show, hide, or flip. |
-| `SetKeybind(keyCode)` | Change the hide key. Updates the footer chip. |
+| `.Flags` | This window's flagged elements. See [Flags](#flags). |
+| `Toggle(open?)` | Show, hide, or flip when called with no argument. |
+| `SelectTab(tab)` | Switch tabs from code. Accepts a tab or its name. |
+| `SetTitle(text)` / `SetSubtitle(text)` / `SetIcon(icon)` | Change the sidebar header. |
+| `SetKeybind(key)` | Change the hide key. Accepts a KeyCode or its name and updates the footer chip. |
 | `SetKeepOnScreen(enabled)` | Turn the viewport clamp on or off. |
-| `SelectTab(tab)` | Switch tabs from code. |
 | `CreateTab(opts)` | See [Tab](#tab). |
 | `Notify(opts)` | See [Notification](#notification). |
-| `Confirm(opts)` / `Dialog(opts)` | See [Confirm](#confirm). |
-| `SaveConfig / LoadConfig / DeleteConfig / ListConfigs` | See [Configs](#configs). |
-| `Destroy()` | Fade out, disconnect everything, remove the gui. |
+| `Confirm(opts)` / `Dialog(opts)` | See [Confirm and Dialog](#confirm-and-dialog). |
+| `SaveConfig` / `LoadConfig` / `DeleteConfig` / `ListConfigs` | See [Configs](#configs). |
+| `Destroy()` | Fade out, disconnect everything, release this window's flags and remove the gui. |
 
 ---
 
@@ -123,34 +147,31 @@ Home = {
             Name = "Changelog",
             Icon = "scroll-text",
             Entries = {
-                { Title = "v1.2", Tag = "Latest", Changes = { "Added the home tab" } },
-                { Title = "v1.1", Date = "Aug 30", Content = "Plain text instead of bullets." },
+                { Title = "v1.3", Tag = "Latest", Changes = { "Live themes" } },
+                { Title = "v1.2", Date = "Aug 30", Content = "Plain text instead of bullets." },
             },
         },
         { Name = "Info", Icon = "info", Content = "Wrapped text in a card." },
-        { Name = "Custom", Icon = "wrench", Build = function(frame) end },
+        { Name = "Custom", Icon = "wrench", Build = function(Frame) end },
     },
 }
 ```
 
-The stats refresh once a second and pause while the window is hidden or another tab is open. Pages appear as a pill strip above the content; the greeting only shows on the first page.
-
-### Properties
+Stats refresh once a second and pause while the window is hidden or another tab is open. Pages appear as a pill strip above the content; the greeting only shows on the first page. `"Region"` asks `ipinfo.io` through the executor's `request` function and shows `Unavailable` without one.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `Name` / `Desc` / `Icon` | string | `"Home"` | The tab itself. |
+| `Name` / `Desc` / `Icon` | string | `"Home"` / — / `"house"` | The tab itself. |
 | `Welcome` | string | `"Hello, "` | Prefix before the player's display name. |
 | `Greeting` | string | time of day | Second line under the welcome. |
-| `SectionName` | string | `"System info"` | Heading above the cards. `Sections = false` hides it. |
-| `Stats` | table | first six | `"FPS"`, `"Ping"`, `"Executor"`, `"Game"`, `"Region"`, `"Time"`, `"Players"`, `"Uptime"`. |
+| `SectionName` | string | `"System info"` | Heading above the stat cards. `Sections = false` hides it. |
+| `Stats` | table | first six | Any of `"FPS"`, `"Ping"`, `"Executor"`, `"Game"`, `"Region"`, `"Time"`, `"Players"`, `"Uptime"`. |
 | `TimeFormat` | string | `"%H:%M"` | `os.date` format for the time card. |
 | `TabIcon` | string | `"layout-grid"` | Icon on the built-in details page button. |
-| `Pages` | table | — | Extra pages beside the details one. |
 | `Pages[n].Name` / `Icon` | string | — | The page button. |
 | `Pages[n].Content` | string | — | Wrapped text in a card. |
 | `Pages[n].Entries` | table | — | Cards with `Title`, `Tag` or `Date`, and `Changes` (a list) or `Content`. |
-| `Pages[n].Build` | function | — | `function(frame)` to fill the page yourself. |
+| `Pages[n].Build` | function | — | `function(Frame)` to fill the page yourself. |
 
 ---
 
@@ -167,11 +188,11 @@ local Tab = Window:CreateTab({
 })
 
 local Tab = Window:CreateTab("Main", "zap")
+
+Tab:Select()
 ```
 
-The first tab created is selected automatically. An empty tab shows its icon with `EmptyText`.
-
-### Properties
+The first tab created is selected automatically. An empty tab shows its icon above `EmptyText`.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -180,9 +201,39 @@ The first tab created is selected automatically. An empty tab shows its icon wit
 | `Icon` | string \| table | — | Sidebar icon, accent-tinted when selected. |
 | `EmptyText` | string | `"Nothing here yet"` | Shown while the tab has no elements. |
 
-### Handle
+The handle has every element constructor below, `Select()`, `.Name` and `.Window`.
 
-Every `Create*` element constructor below, plus `.Name` and `.Window`.
+---
+
+## Every element
+
+These options work on every element that sits in a card.
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `Flag` | string | Save key. Registers the element on `Airflow.Flags` and `Window.Flags`. |
+| `Locked` | boolean | Start locked: dimmed, with a lock pill, ignoring clicks, drags and keybinds. |
+| `LockedReason` | string | Text in the lock pill. Defaults to `"Locked"`. |
+| `Visible` | boolean | `false` creates it hidden. |
+
+And every handle has these methods:
+
+| Method | Description |
+| --- | --- |
+| `SetTitle(text)` | Replace the label. |
+| `SetDesc(text)` | Replace the description. Only for elements created with a `Desc`. |
+| `SetLocked(locked, reason?)` | Lock or unlock. Locking also collapses dropdowns and colour pickers. `.Locked` holds the state. |
+| `SetVisible(visible)` | Show or hide the card; the list closes the gap. `.Visible` holds the state. |
+| `Destroy()` | Remove the card, its listeners and its flag. |
+
+Locking only blocks input. `Set` from your own code still works.
+
+```lua
+local Fly = Tab:CreateToggle({ Name = "Fly", Locked = true, LockedReason = "Premium" })
+
+Fly:SetLocked(false)
+Fly:SetTitle("Fly (unlocked)")
+```
 
 ---
 
@@ -195,8 +246,6 @@ local Section = Tab:CreateSection("Movement")
 
 Section:Set("Movement (beta)")
 ```
-
-### Handle
 
 | Member | Description |
 | --- | --- |
@@ -233,21 +282,16 @@ local Label = Tab:CreateLabel("Players: 12")
 Label:Set("Players: 13")
 ```
 
-### Properties
-
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Text` | string | `""` | The line. A bare string works too. |
 | `Color` | Color3 | muted | Text colour. |
-| `Update` | function | — | Called on a timer; its return value becomes the text. |
-| `UpdateRate` | number | `1` | Seconds between `Update` calls. |
-
-### Handle
+| `Update` | function | — | Called on a timer; its return value becomes the text. Stops when the label is destroyed. |
+| `UpdateRate` | number | `1` | Seconds between `Update` calls. Minimum `0.05`. |
 
 | Member | Description |
 | --- | --- |
-| `Set(text)` | Replace the line. |
-| `Get()` | The current text. |
+| `Set(text)` / `Get()` | Replace or read the line. |
 | `SetUpdateRate(seconds)` | Change the timer, when `Update` was given. |
 
 ---
@@ -263,20 +307,18 @@ local Paragraph = Tab:CreateParagraph({
 })
 
 Paragraph:Set("Updated body")
+Paragraph:SetTitle("About this hub")
 ```
-
-### Properties
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Title` | string | `""` | Heading. |
 | `Content` | string | `""` | Body. Wraps and grows the card. |
 
-### Handle
-
 | Member | Description |
 | --- | --- |
-| `Set(text)` | Replace the body. |
+| `Set(text)` / `Get()` | Replace or read the body. |
+| `SetTitle(text)` | Replace the heading. |
 
 ---
 
@@ -298,21 +340,17 @@ local Button = Tab:CreateButton({
 Button:SetText("Respawn")
 ```
 
-### Properties
-
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Name` | string | `"Button"` | The label. |
 | `Desc` | string | — | Hint text under the label. |
 | `Icon` | string \| table | — | Leading icon. |
-| `Style` | string | — | `"Primary"` fills the card with the accent colour. |
+| `Style` | string | — | `"Primary"` fills the card with the accent colour, `"Danger"` with the error colour. |
 | `Callback` | function | — | Runs on click. |
-
-### Handle
 
 | Member | Description |
 | --- | --- |
-| `SetText(text)` | Replace the label. |
+| `SetText(text)` | Replace the label. Same as `SetTitle`. |
 
 ---
 
@@ -334,23 +372,18 @@ local Toggle = Tab:CreateToggle({
 Toggle:Set(false)
 ```
 
-### Properties
-
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Name` | string | `"Toggle"` | The label. |
 | `Desc` | string | — | Hint text under the label. |
-| `CurrentValue` | boolean | `false` | The initial state. The callback fires once on creation if `true`. |
-| `Flag` | string | — | The save key. |
+| `CurrentValue` | boolean | `false` | Initial state. The callback fires once on creation when `true`. |
+| `Flag` | string | — | Save key. |
 | `Callback` | function | — | Runs with the new value on every change. |
-
-### Handle
 
 | Member | Description |
 | --- | --- |
-| `.Value` | The current state. |
-| `Set(value, skipCallback?)` | Set the state. Pass `true` as the second argument to skip the callback. |
-| `Get()` | The current state. |
+| `.Value` / `Get()` | The current state. |
+| `Set(value, skipCallback?)` | Set the state. |
 
 ---
 
@@ -377,26 +410,22 @@ Slider:Set(50)
 
 Click the value chip to type an exact number.
 
-### Properties
-
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Name` | string | `"Slider"` | The label. |
-| `Desc` | string | — | Hint text under the label. |
-| `Range` | table | `{ 0, 100 }` | `{ min, max }`. |
-| `Increment` | number | `1` | Snap size. Its decimals set how the value is shown. |
+| `Desc` | string | — | Hint text under the label. Makes the card taller. |
+| `Range` | table | `{ 0, 100 }` | `{ min, max }`. A reversed range is swapped. |
+| `Increment` | number | `1` | Snap size. Its decimals (up to 6) set how the value is shown, and values are rounded to them, so `0.1` steps give `0.3`, never `0.30000000000000004`. |
 | `Suffix` | string | `""` | Appended to the value chip. |
-| `CurrentValue` | number | min | The initial value. |
-| `Flag` | string | — | The save key. |
+| `CurrentValue` | number | min | Initial value. |
+| `Flag` | string | — | Save key. |
 | `Callback` | function | — | Runs with the new value on every change, including while dragging. |
-
-### Handle
+| `OnRelease` | function | — | Runs once with the final value when a drag ends. Use it for work too heavy to repeat every frame. |
 
 | Member | Description |
 | --- | --- |
-| `.Value` | The current value. |
-| `Set(value, skipCallback?)` | Set the value. Slides with a small overshoot. |
-| `Get()` | The current value. |
+| `.Value` / `Get()` | The current value. |
+| `Set(value, skipCallback?)` | Set the value. Snapped, clamped, and eased with a small overshoot. |
 
 ---
 
@@ -421,28 +450,23 @@ local Stepper = Tab:CreateStepper({
 Stepper:Set(75)
 ```
 
-Hold either button to repeat.
-
-### Properties
+Hold either button to repeat after 0.4 s.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Name` | string | `"Stepper"` | The label. |
 | `Desc` | string | — | Hint text under the label. |
 | `Range` | table | `{ 0, 100 }` | `{ min, max }`. |
-| `Increment` | number | `1` | Step per press. Its decimals set how the value is shown. |
+| `Increment` | number | `1` | Step per press. Decimals behave as on the slider. |
 | `Suffix` | string | `""` | Appended to the value. |
-| `CurrentValue` | number | min | The initial value. |
-| `Flag` | string | — | The save key. |
+| `CurrentValue` | number | min | Initial value. |
+| `Flag` | string | — | Save key. |
 | `Callback` | function | — | Runs with the new value on every change. |
-
-### Handle
 
 | Member | Description |
 | --- | --- |
-| `.Value` | The current value. |
-| `Set(value, skipCallback?)` | Set the value. Snapped to the increment and clamped to the range. |
-| `Get()` | The current value. |
+| `.Value` / `Get()` | The current value. |
+| `Set(value, skipCallback?)` | Set the value, snapped and clamped. |
 
 ---
 
@@ -459,33 +483,25 @@ local Progress = Tab:CreateProgress({
     Format = function(Fraction)
         return math.floor(Fraction * 100) .. " hp"
     end,
-    Callback = function(Fraction)
-        print("Health:", Fraction)
-    end,
 })
 
 Progress:Set(0.5)
 ```
 
-### Properties
-
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Name` | string | `"Progress"` | The label. |
 | `Desc` | string | — | Hint text under the label. |
-| `CurrentValue` | number | `0` | The initial fraction. |
+| `CurrentValue` | number | `0` | Initial fraction. |
 | `Color` | Color3 | accent | Fill colour. |
 | `Format` | function | percentage | Returns the label text for a fraction. |
 | `Callback` | function | — | Runs on `Set` unless skipped. |
 
-### Handle
-
 | Member | Description |
 | --- | --- |
-| `.Value` | The current fraction. |
-| `Set(value, skipCallback?)` | Set the fraction. Eases the fill. |
+| `.Value` / `Get()` | The current fraction. |
+| `Set(value, skipCallback?)` | Set the fraction, clamped to 0–1. Eases the fill. |
 | `SetColor(color)` | Change the fill colour. |
-| `Get()` | The current fraction. |
 
 ---
 
@@ -500,6 +516,7 @@ local Dropdown = Tab:CreateDropdown({
     Options = { "Classic", "Follow", "Orbital", "Track" },
     CurrentOption = "Classic",
     MultipleOptions = false,
+    Placeholder = "None",
     SearchAfter = 6,
     Flag = "CameraMode",
     Callback = function(Option)
@@ -508,32 +525,30 @@ local Dropdown = Tab:CreateDropdown({
 })
 
 Dropdown:Set("Follow")
+Dropdown:Refresh({ "Classic", "Follow" }, true)
 ```
 
 Clicking the selected row unchecks it. Lists longer than `SearchAfter` get a search box.
-
-### Properties
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Name` | string | `"Dropdown"` | The label. |
 | `Desc` | string | — | Hint text under the label. |
-| `Options` | table | `{}` | The rows. |
-| `CurrentOption` | string \| table | — | The initial selection. A table in multi mode. |
+| `Options` | table | `{}` | The rows. Values are shown with `tostring`, so numbers work. |
+| `CurrentOption` | any \| table | — | Initial selection. A table in multi mode. |
 | `MultipleOptions` | boolean | `false` | Rows toggle independently and the callback receives a list. |
-| `SearchAfter` | number | `6` | Row count that turns the search box on. |
-| `Flag` | string | — | The save key. |
-| `Callback` | function | — | Runs with the selection on every change. `nil` when unchecked. |
-
-### Handle
+| `Placeholder` | string | `"None"` | Chip text while nothing is selected. |
+| `SearchAfter` | number | `6` | Row count above which the search box appears. |
+| `Flag` | string | — | Save key. |
+| `Callback` | function | — | Runs with the selection on every change: a value (`nil` when unchecked), or a list in multi mode. |
 
 | Member | Description |
 | --- | --- |
 | `.Open` | Whether the list is expanded. |
+| `Get()` | The current selection. |
 | `Set(value, skipCallback?)` | Select a value, or a list in multi mode. |
 | `Refresh(options, keepSelection?)` | Replace the rows. |
 | `SetOpen(open)` | Expand or collapse. |
-| `Get()` | The current selection. |
 
 ---
 
@@ -548,8 +563,13 @@ local Input = Tab:CreateInput({
     Icon = "user",
     PlaceholderText = "type here",
     CurrentValue = "",
+    MaxLength = 20,
     Numeric = false,
+    ClearOnFocus = false,
     Flag = "PlayerName",
+    OnChanged = function(Text)
+        print("Typing:", Text)
+    end,
     Callback = function(Text, EnterPressed)
         print("Input:", Text, EnterPressed)
     end,
@@ -558,25 +578,25 @@ local Input = Tab:CreateInput({
 Input:Set("Pookie")
 ```
 
-### Properties
-
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Name` | string | `"Input"` | The label. |
 | `Desc` | string | — | Hint text under the label. |
 | `Icon` | string \| table | — | Icon inside the box. |
 | `PlaceholderText` | string | `""` | Shown while empty. |
-| `CurrentValue` | string | `""` | The initial text. |
-| `Numeric` | boolean | `false` | Clears the box and skips the callback if the text is not a number. |
-| `Flag` | string | — | The save key. |
-| `Callback` | function | — | Runs when focus is lost. The second argument is whether Enter was pressed. |
-
-### Handle
+| `CurrentValue` | string | `""` | Initial text. |
+| `MaxLength` | number | — | Longer text is cut to this many characters. |
+| `Numeric` | boolean | `false` | On focus loss, clears the box and skips the callback when the text is not a number. |
+| `ClearOnFocus` | boolean | `false` | Empty the box when it gains focus. |
+| `Flag` | string | — | Save key. |
+| `OnChanged` | function | — | Runs on every keystroke while the box has focus. |
+| `Callback` | function | — | Runs when focus is lost, and on `Set`. The second argument is whether Enter was pressed. |
 
 | Member | Description |
 | --- | --- |
-| `Set(text)` | Replace the text. |
 | `Get()` | The current text. |
+| `Set(text, skipCallback?)` | Replace the text and fire `Callback(text, false)`. |
+| `SetPlaceholder(text)` | Replace the placeholder. |
 
 ---
 
@@ -586,42 +606,40 @@ Input:Set("Pookie")
 
 ```lua
 local Keybind = Tab:CreateKeybind({
-    Name = "Toggle sprint",
-    Desc = "Press to flip the toggle",
-    CurrentKeybind = "F",
+    Name = "Sprint",
+    Desc = "Hold to run",
+    CurrentKeybind = "LeftShift",
+    Mode = "Hold",
     Flag = "SprintKey",
-    Callback = function(Key)
-        print("Pressed:", Key.Name)
+    Callback = function(Held)
+        print("Sprinting:", Held)
     end,
     OnChanged = function(Key)
-        print("Rebound to:", Key.Name)
+        print("Rebound to:", Key and Key.Name)
     end,
 })
 
-Keybind:Set(Enum.KeyCode.G)
+Keybind:Set("G")
 ```
 
-Click the chip and press a key to rebind. Escape cancels.
-
-### Properties
+Click the chip and press a key to rebind. Escape cancels; Backspace or Delete clears the binding.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Name` | string | `"Keybind"` | The label. |
 | `Desc` | string | — | Hint text under the label. |
-| `CurrentKeybind` | string \| KeyCode | — | The initial key. |
-| `Flag` | string | — | The save key. |
-| `Callback` | function | — | Runs when the key is pressed and no text box has focus. |
-| `OnChanged` | function | — | Runs when the user rebinds it. |
-
-### Handle
+| `CurrentKeybind` | string \| KeyCode | — | Initial key. An unknown name warns and leaves it unbound. |
+| `Mode` | string | `"Press"` | `"Press"` calls `Callback(KeyCode)` on key down. `"Hold"` calls `Callback(true)` on key down and `Callback(false)` on key up. |
+| `Flag` | string | — | Save key. Rebinding triggers autosave. |
+| `Callback` | function | — | Runs on the key while no text box has focus and the element is not locked. |
+| `OnChanged` | function | — | Runs with the new KeyCode, or `nil`, when it is rebound. |
 
 | Member | Description |
 | --- | --- |
-| `.Value` | The current KeyCode, or `nil`. |
+| `.Value` / `Get()` | The current KeyCode, or `nil`. |
 | `.Listening` | Whether the chip is waiting for a key. |
-| `Set(keyCode, skipCallback?)` | Rebind. Pass `true` to skip `OnChanged`. |
-| `Get()` | The current KeyCode. |
+| `.Held` | In hold mode, whether the key is down. |
+| `Set(key, skipCallback?)` | Rebind. Accepts a KeyCode, its name or `nil`. Pass `true` to skip `OnChanged`. |
 
 ---
 
@@ -641,29 +659,25 @@ local ColorPicker = Tab:CreateColorPicker({
 })
 
 ColorPicker:Set(Color3.fromRGB(150, 220, 170))
+ColorPicker:Set("#96DCAA")
 ```
 
 The panel has a saturation/value square, a hue bar, a hex box and an RGB readout.
-
-### Properties
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Name` | string | `"Color"` | The label. |
 | `Desc` | string | — | Hint text under the label. |
-| `Color` | Color3 | accent | The initial colour. |
-| `Flag` | string | — | The save key. |
+| `Color` | Color3 \| string | accent | Initial colour, as a Color3 or hex string. |
+| `Flag` | string | — | Save key. |
 | `Callback` | function | — | Runs with the new colour on every change, including while dragging. |
-
-### Handle
 
 | Member | Description |
 | --- | --- |
-| `.Value` | The current colour. |
+| `.Value` / `Get()` | The current colour. |
 | `.Open` | Whether the panel is expanded. |
-| `Set(color, skipCallback?)` | Set the colour. Animates the cursors. |
+| `Set(color, skipCallback?)` | Set from a Color3 or hex string. Anything else warns and is ignored. |
 | `SetOpen(open)` | Expand or collapse. |
-| `Get()` | The current colour. |
 
 ---
 
@@ -680,22 +694,20 @@ local Notification = Airflow:Notify({
     Duration = 4,
 })
 
-local Notification = Window:Notify({ Title = "Window specific" })
+Window:Notify({ Title = "Window specific" })
 
 Notification:Dismiss()
 ```
 
-### Properties
+`Airflow:Notify` uses the most recently created window and returns `nil` when none exists.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `Title` | string | `"Notification"` | Bold first line. |
+| `Title` | string | `"Notification"` | First line. |
 | `Content` | string | — | Wrapped body. |
 | `Icon` | string \| table | — | Icon before the title. |
 | `Duration` | number | `4` | Seconds before it dismisses itself. |
-| `Type` | string | `"Info"` | `"Info"`, `"Success"`, `"Warning"` or `"Error"`. Tints the title. |
-
-### Handle
+| `Type` | string | — | `"Info"`, `"Success"`, `"Warning"` or `"Error"`. Colours the edge, icon and timer bar; the last three also tint the title. |
 
 | Member | Description |
 | --- | --- |
@@ -703,27 +715,22 @@ Notification:Dismiss()
 
 ---
 
-## Confirm
+## Confirm and Dialog
 
 > Ask before doing something.
 
 ```lua
-Tab:CreateButton({
-    Name = "Unload",
+Airflow:Confirm({
+    Title = "Unload?",
+    Content = "The window closes and everything is restored.",
+    Icon = "power",
+    ConfirmText = "Unload",
+    CancelText = "Keep",
     Callback = function()
-        Airflow:Confirm({
-            Title = "Unload?",
-            Content = "The window closes and everything is restored.",
-            Icon = "power",
-            ConfirmText = "Unload",
-            CancelText = "Keep",
-            Callback = function()
-                Window:Destroy()
-            end,
-            OnCancel = function()
-                print("Kept")
-            end,
-        })
+        Window:Destroy()
+    end,
+    OnCancel = function()
+        print("Kept")
     end,
 })
 
@@ -739,19 +746,64 @@ Airflow:Dialog({
 })
 ```
 
-### Properties
-
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `Title` | string | `"Are you sure?"` | Heading. |
 | `Content` | string | — | Wrapped body. |
 | `Icon` | string \| table | — | Icon before the heading. |
-| `ConfirmText` | string | `"Confirm"` | Primary button. |
-| `CancelText` | string | `"Cancel"` | Secondary button. |
-| `Callback` | function | — | Runs when confirmed. |
-| `OnCancel` | function | — | Runs on cancel or a backdrop click. |
+| `ConfirmText` / `CancelText` | string | `"Confirm"` / `"Cancel"` | Button labels (Confirm only). |
+| `Callback` | function | — | Runs when confirmed (Confirm only). |
+| `OnCancel` | function | — | Runs on cancel, a backdrop click or Escape. |
+| `Buttons` | table | — | Dialog only: `{ Title, Variant, Callback }` per button. `Variant = "Primary"` gives the accent fill. |
+| `CloseOnBackdrop` | boolean | `true` | `false` forces a button press: backdrop clicks and Escape are ignored. |
 
-`Dialog` builds the same card with any number of buttons. `Variant = "Primary"` gives a button the accent fill. `CloseOnBackdrop = false` forces a button press.
+Opening a dialog closes any dialog already open in that window. Both return a handle with `Close()` (closes silently) and `Cancel()` (closes and runs `OnCancel`).
+
+---
+
+## Themes
+
+> Six built-in palettes, your own palettes, and live switching.
+
+```lua
+Airflow:SetTheme("Midnight")
+
+Airflow:SetTheme({ Accent = Color3.fromRGB(120, 200, 255) })
+
+Airflow:AddTheme("Ocean", {
+    Base = "Midnight",
+    Accent = Color3.fromRGB(90, 210, 220),
+    AccentDark = Color3.fromRGB(8, 24, 28),
+})
+
+Settings:CreateThemePicker({ Flag = "Theme" })
+```
+
+`SetTheme` recolours every open window in place, so switching mid-session is fine. Themes are global: all windows share one. Built in: `Default`, `Midnight`, `Moss`, `Ember`, `Rose`, `Mono`.
+
+A theme table only needs the colours it changes. Missing keys come from `Base` (default `"Default"`).
+
+| Function | Description |
+| --- | --- |
+| `Airflow:SetTheme(nameOrTable)` | Apply a theme. Returns `false` and warns for an unknown name. |
+| `Airflow:AddTheme(name, table)` | Register a theme so `SetTheme(name)` and the picker can use it. |
+| `Airflow:GetThemes()` | Theme names, `Default` first then alphabetical. |
+| `Airflow.Theme` | The live colour table. Read it; change it through `SetTheme`. |
+| `Airflow.ThemeName` | The current theme's name, `"Custom"` for an unnamed table. |
+| `Tab:CreateThemePicker({ Name?, Desc?, Flag?, Callback? })` | A dropdown of every theme. With a `Flag`, configs remember the choice. |
+
+| Key | Used for |
+| --- | --- |
+| `Background` | Window, toast and dialog fill. |
+| `Surface` | Chips, text boxes, option rows. |
+| `Surface2` | Element cards, selected tab. |
+| `Surface3` | Toggle pill off, tracks. |
+| `Stroke` / `StrokeHover` | Outlines at rest / on hover, focus and open. |
+| `Accent` | Highlights, primary buttons, indicator, progress bars. |
+| `AccentDark` | Text and icons on accent or danger fills. |
+| `Text` / `Muted` | Primary and secondary text. Built-in `Muted` colours keep at least 4.5:1 contrast on cards. |
+| `Glow` | Tint of the soft glow decals. |
+| `Success` / `Warning` / `Error` | Notification types and `Danger` buttons. |
 
 ---
 
@@ -762,9 +814,11 @@ Airflow:Dialog({
 ```lua
 print(Airflow.Flags.AutoSprint:Get())
 Airflow.Flags.WalkSpeed:Set(50)
+
+print(Window.Flags.WalkSpeed.Value)
 ```
 
-Toggles, sliders, steppers, dropdowns, inputs, keybinds and colour pickers created with a `Flag` are stored on `Airflow.Flags`. Flags are also what configs save.
+Elements created with a `Flag` are stored on `Airflow.Flags` (all windows) and on `Window.Flags` (that window only). Configs save and load `Window.Flags`. Destroying an element or its window removes its flags.
 
 ---
 
@@ -775,7 +829,7 @@ Toggles, sliders, steppers, dropdowns, inputs, keybinds and colour pickers creat
 ```lua
 local Window = Airflow:CreateWindow({
     Name = "Airflow",
-    ConfigurationSaving = { Enabled = true, FolderName = "MyHub", FileName = "default" },
+    ConfigurationSaving = { Enabled = true, FolderName = "MyHub", FileName = "default", AutoSave = true },
 })
 
 -- create tabs and elements
@@ -783,25 +837,23 @@ local Window = Airflow:CreateWindow({
 Window:LoadConfig()
 ```
 
-Requires `writefile` / `readfile`. Keybinds are stored by key name, colours as RGB components. Call `LoadConfig` after every element exists.
-
-### Properties
+Requires `writefile`, `readfile` and `isfile`; listing and deleting also need `listfiles`, `isfolder` and `delfile`. Call `LoadConfig` after every element exists. Keybinds are stored by key name and colours as RGB components. Config names are cleaned to a single file name: slashes, `..` and characters invalid in file names are removed.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `Enabled` | boolean | `true` | Auto-save 0.5 s after any flagged element changes. |
+| `Enabled` | boolean | `true` | Turns config saving on for this window. |
+| `AutoSave` | boolean | `false` | Save 0.5 s after any flagged element changes. Also switchable at runtime with `Window:SetAutoSave(on)` or the config manager toggle. |
 | `FolderName` | string | `"AirflowUI"` | Folder in the executor workspace. |
 | `FileName` | string | `"default"` | Config used when no name is given. |
-
-### Handle
 
 | Member | Description |
 | --- | --- |
 | `Window:SaveConfig(name?)` | Write `<folder>/<name>.json`. Returns `ok, err`. |
-| `Window:LoadConfig(name?, skipCallbacks?)` | Apply a saved config. |
-| `Window:DeleteConfig(name)` | Remove the file. |
+| `Window:LoadConfig(name?, skipCallbacks?)` | Apply a saved config. Returns `ok, err`. Flags that fail to apply print a warning. |
+| `Window:DeleteConfig(name)` | Remove the file. Returns `ok, err`. |
 | `Window:ListConfigs()` | Sorted list of saved names. |
-| `Tab:CreateConfigManager({ Name })` | Name input, saved-config dropdown, Save / Load / Delete and an auto-save toggle. Returns `Save / Load / Delete / Refresh`. |
+| `Window:SetAutoSave(enabled)` | Turn autosave on or off. |
+| `Tab:CreateConfigManager({ Name })` | Name input, saved-config dropdown, Save / Load / Delete and an auto-save toggle. Returns a handle with `Save(name?)`, `Load(name?)`, `Delete(name?)` and `Refresh()`. |
 
 ---
 
@@ -813,7 +865,6 @@ Requires `writefile` / `readfile`. Keybinds are stored by key name, colours as R
 Airflow:PreloadIcons()
 
 Window:CreateTab({ Name = "Main", Icon = "zap" })
-Tab:CreateButton({ Name = "Rejoin", Icon = "refresh-cw" })
 Tab:CreateInput({ Name = "Key", Icon = "lucide:key-round" })
 Window:CreateTab({ Name = "Custom", Icon = "rbxassetid://103859712365480" })
 Tab:CreateButton({
@@ -822,7 +873,7 @@ Tab:CreateButton({
 })
 ```
 
-Names resolve through the [Footagesus/Icons](https://github.com/Footagesus/Icons) list, fetched once on first use; `Airflow:PreloadIcons()` fetches it up front.
+Names resolve through the [Footagesus/Icons](https://github.com/Footagesus/Icons) list, fetched once on first use. `Airflow:PreloadIcons()` fetches it up front and returns whether it loaded. Unknown names print a warning and leave the icon blank.
 
 ---
 
@@ -844,62 +895,13 @@ Airflow:LoadFont({
 })
 ```
 
-Call it before `CreateWindow`. The TTFs are saved to the folder on first run and reused after that. Needs `writefile`, `isfile` and `getcustomasset`; without them the default Builder Sans stays.
-
-### Properties
+Call it before `CreateWindow`. The TTFs are saved to the folder on first run and reused after that. Needs `writefile`, `isfile` and `getcustomasset`; without them it returns `false` and Builder Sans stays.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `Name` | string | — | Family name. `"ValleySans"` uses the built-in URLs. |
+| `Name` | string | `"CustomFont"` | Family name. `"ValleySans"` uses built-in URLs. |
 | `Folder` | string | `"AirFlowFonts"` | Where the TTFs and family file are saved. |
 | `Weights` | table | preset | `Regular`, `Medium`, `SemiBold`, `Bold` → TTF URL. |
 
----
+The faces in use live on `Airflow.Fonts.Regular` / `Medium` / `Bold` (body text / titles and chips / emphasis) and can be replaced with any `Font` before creating a window.
 
-## Theme
-
-> Colours, fonts and assets. Change them before creating a window.
-
-```lua
-Airflow.Theme.Background = Color3.fromRGB(20, 16, 20)
-Airflow.Theme.Surface = Color3.fromRGB(24, 19, 24)
-Airflow.Theme.Surface2 = Color3.fromRGB(28, 22, 28)
-Airflow.Theme.Surface3 = Color3.fromRGB(42, 36, 43)
-Airflow.Theme.Stroke = Color3.fromRGB(40, 32, 41)
-Airflow.Theme.StrokeHover = Color3.fromRGB(88, 70, 90)
-Airflow.Theme.Accent = Color3.fromRGB(235, 199, 246)
-Airflow.Theme.AccentDark = Color3.fromRGB(24, 18, 26)
-Airflow.Theme.Text = Color3.fromRGB(233, 229, 234)
-Airflow.Theme.Muted = Color3.fromRGB(125, 115, 126)
-Airflow.Theme.Success = Color3.fromRGB(150, 220, 170)
-Airflow.Theme.Warning = Color3.fromRGB(240, 176, 108)
-Airflow.Theme.Error = Color3.fromRGB(240, 120, 120)
-
-local Family = "rbxasset://fonts/families/BuilderSans.json"
-Airflow.Fonts.Regular = Font.new(Family, Enum.FontWeight.Regular)
-Airflow.Fonts.Medium = Font.new(Family, Enum.FontWeight.Medium)
-Airflow.Fonts.Bold = Font.new(Family, Enum.FontWeight.SemiBold)
-
-Airflow.Assets.Logo = "rbxassetid://103859712365480"
-Airflow.Assets.Glow = "rbxassetid://8992230677"
-Airflow.Assets.Shadow = "rbxassetid://6014261993"
-```
-
-### Properties
-
-| Name | Used for |
-| --- | --- |
-| `Background` | Window, toast and dialog fill. |
-| `Surface` | Chips, text boxes, option rows. |
-| `Surface2` | Element cards, selected tab. |
-| `Surface3` | Toggle pill off, tracks. |
-| `Stroke` | Outlines at rest. |
-| `StrokeHover` | Outlines on hover, focus, open. |
-| `Accent` | Highlights, primary buttons, indicator, progress bars. |
-| `AccentDark` | Text on accent surfaces. |
-| `Text` / `Muted` | Primary and secondary text. |
-| `Success` / `Warning` / `Error` | Notification title tints. |
-| `Fonts.Regular` / `Medium` / `Bold` | Body text / titles and chips / emphasis. |
-| `Assets.Logo` / `Glow` / `Shadow` | Header mark, glow decal, drop shadow. |
-
-`Airflow.Touch` is `true` on touch-only devices; cards, chips and hit areas are larger there automatically.
