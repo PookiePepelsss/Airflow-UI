@@ -33,7 +33,10 @@ local function normalize(source, map)
     return opts
 end
 
-local function finishElement(tab, opts, element, frame, kind)
+local attachCommon -- assigned once the instance helpers below exist
+
+-- changeKey names the opts field that fires when the stored value changes; autosave hooks it.
+local function finishElement(tab, opts, element, frame, kind, changeKey)
     element._type = kind
     element._frame = frame
     element._listeners = element._listeners or {}
@@ -41,8 +44,10 @@ local function finishElement(tab, opts, element, frame, kind)
     if opts.Flag then
         Library.Flags[opts.Flag] = element
         if window then
-            local callback = opts.Callback
-            opts.Callback = function(...)
+            window.Flags[opts.Flag] = element
+            changeKey = changeKey or "Callback"
+            local callback = opts[changeKey]
+            opts[changeKey] = function(...)
                 if type(callback) == "function" then
                     callback(...)
                 end
@@ -59,8 +64,13 @@ local function finishElement(tab, opts, element, frame, kind)
             disconnect()
         end
         element._listeners = {}
-        if opts.Flag and Library.Flags[opts.Flag] == element then
-            Library.Flags[opts.Flag] = nil
+        if opts.Flag then
+            if Library.Flags[opts.Flag] == element then
+                Library.Flags[opts.Flag] = nil
+            end
+            if window and window.Flags[opts.Flag] == element then
+                window.Flags[opts.Flag] = nil
+            end
         end
         if window then
             window._controlsDirty = true
@@ -69,24 +79,79 @@ local function finishElement(tab, opts, element, frame, kind)
             frame:Destroy()
         end
     end
+    if frame then
+        attachCommon(element, frame, opts)
+    end
     return element
 end
 
-Library.Theme = {
-    Background = Color3.fromRGB(20, 16, 20),
-    Surface = Color3.fromRGB(24, 19, 24),
-    Surface2 = Color3.fromRGB(28, 22, 28),
-    Surface3 = Color3.fromRGB(42, 36, 43),
-    Stroke = Color3.fromRGB(40, 32, 41),
-    StrokeHover = Color3.fromRGB(88, 70, 90),
-    Accent = Color3.fromRGB(235, 199, 246),
-    AccentDark = Color3.fromRGB(24, 18, 26),
-    Text = Color3.fromRGB(233, 229, 234),
-    Muted = Color3.fromRGB(125, 115, 126),
-    Warning = Color3.fromRGB(240, 176, 108),
-    Success = Color3.fromRGB(150, 220, 170),
-    Error = Color3.fromRGB(240, 120, 120),
+local THEME_KEYS = {
+    "Background", "Surface", "Surface2", "Surface3", "Stroke", "StrokeHover",
+    "Accent", "AccentDark", "Text", "Muted", "Glow", "Warning", "Success", "Error",
 }
+
+local function rgb(r, g, b)
+    return Color3.fromRGB(r, g, b)
+end
+
+local STATUS_COLORS = {
+    Warning = rgb(240, 176, 108),
+    Success = rgb(150, 220, 170),
+    Error = rgb(240, 120, 120),
+}
+
+local function preset(colors)
+    for key, value in pairs(STATUS_COLORS) do
+        if colors[key] == nil then
+            colors[key] = value
+        end
+    end
+    return colors
+end
+
+-- Muted values are tuned for at least 4.5:1 contrast against Surface2 (WCAG AA body text).
+Library.Themes = {
+    Default = preset({
+        Background = rgb(20, 16, 20), Surface = rgb(24, 19, 24), Surface2 = rgb(28, 22, 28), Surface3 = rgb(42, 36, 43),
+        Stroke = rgb(40, 32, 41), StrokeHover = rgb(88, 70, 90),
+        Accent = rgb(235, 199, 246), AccentDark = rgb(24, 18, 26),
+        Text = rgb(233, 229, 234), Muted = rgb(138, 127, 139), Glow = rgb(226, 218, 230),
+    }),
+    Midnight = preset({
+        Background = rgb(14, 16, 22), Surface = rgb(18, 21, 28), Surface2 = rgb(22, 25, 34), Surface3 = rgb(36, 41, 54),
+        Stroke = rgb(32, 36, 48), StrokeHover = rgb(70, 80, 104),
+        Accent = rgb(150, 180, 255), AccentDark = rgb(12, 16, 28),
+        Text = rgb(226, 230, 240), Muted = rgb(122, 131, 153), Glow = rgb(210, 220, 240),
+    }),
+    Moss = preset({
+        Background = rgb(15, 18, 15), Surface = rgb(19, 23, 19), Surface2 = rgb(23, 28, 23), Surface3 = rgb(37, 44, 37),
+        Stroke = rgb(33, 40, 33), StrokeHover = rgb(72, 88, 72),
+        Accent = rgb(176, 222, 170), AccentDark = rgb(14, 22, 14),
+        Text = rgb(228, 234, 227), Muted = rgb(121, 136, 119), Glow = rgb(214, 230, 212),
+    }),
+    Ember = preset({
+        Background = rgb(20, 16, 13), Surface = rgb(25, 20, 16), Surface2 = rgb(30, 24, 19), Surface3 = rgb(46, 37, 30),
+        Stroke = rgb(42, 34, 27), StrokeHover = rgb(96, 76, 58),
+        Accent = rgb(255, 190, 140), AccentDark = rgb(28, 18, 10),
+        Text = rgb(240, 232, 226), Muted = rgb(146, 129, 113), Glow = rgb(240, 222, 208),
+    }),
+    Rose = preset({
+        Background = rgb(21, 14, 17), Surface = rgb(26, 18, 21), Surface2 = rgb(31, 21, 25), Surface3 = rgb(48, 34, 40),
+        Stroke = rgb(44, 30, 36), StrokeHover = rgb(100, 66, 80),
+        Accent = rgb(255, 170, 195), AccentDark = rgb(30, 12, 18),
+        Text = rgb(240, 228, 232), Muted = rgb(149, 124, 133), Glow = rgb(240, 214, 222),
+    }),
+    Mono = preset({
+        Background = rgb(16, 16, 17), Surface = rgb(20, 20, 21), Surface2 = rgb(24, 24, 26), Surface3 = rgb(40, 40, 43),
+        Stroke = rgb(36, 36, 39), StrokeHover = rgb(80, 80, 86),
+        Accent = rgb(230, 230, 235), AccentDark = rgb(18, 18, 20),
+        Text = rgb(232, 232, 236), Muted = rgb(130, 130, 136), Glow = rgb(220, 220, 226),
+    }),
+}
+
+-- Live table: SetTheme mutates it in place so every module-level alias stays valid.
+Library.Theme = table.clone(Library.Themes.Default)
+Library.ThemeName = "Default"
 
 Library.Assets = {
     Shadow = "rbxassetid://6014261993",
@@ -338,7 +403,7 @@ local function glow(parent, size, position, transparency, rotation)
         Size = size,
         BackgroundTransparency = 1,
         Image = Assets.Glow,
-        ImageColor3 = Color3.fromRGB(226, 218, 230),
+        ImageColor3 = Theme.Glow,
         ImageTransparency = transparency,
         ZIndex = 0,
         Parent = parent,
@@ -487,18 +552,19 @@ end
 
 local ripplePool = {}
 
-local function ripple(button)
+local function ripple(button, color)
     local mouse = pointerPosition()
     local diameter = math.max(button.AbsoluteSize.X, button.AbsoluteSize.Y) * 2.2
     local circle = table.remove(ripplePool)
     if not circle then
         circle = create("Frame", {
             AnchorPoint = Vector2.new(0.5, 0.5),
-            BackgroundColor3 = Theme.Accent,
             BorderSizePixel = 0,
         })
         corner(circle, UDim.new(1, 0))
     end
+    -- pooled circles live outside any window, so the theme remap never reaches them
+    circle.BackgroundColor3 = color or Theme.Accent
     circle.Position = UDim2.fromOffset(mouse.X - button.AbsolutePosition.X, mouse.Y - button.AbsolutePosition.Y)
     circle.Size = UDim2.fromOffset(0, 0)
     circle.BackgroundTransparency = 0.82
@@ -506,6 +572,9 @@ local function ripple(button)
     circle.Parent = button
     tween(circle, { Size = UDim2.fromOffset(diameter, diameter), BackgroundTransparency = 1 }, 0.55)
     task.delay(0.55, function()
+        if circle.Parent ~= button then
+            return -- the button was destroyed (e.g. its callback unloaded the window)
+        end
         circle.Parent = nil
         if #ripplePool < 4 then
             table.insert(ripplePool, circle)
@@ -553,6 +622,24 @@ local function keyName(keyCode)
     return KEY_NAMES[keyCode] or keyCode.Name
 end
 
+-- Accepts an Enum.KeyCode or its name; indexing Enum.KeyCode with a bad name throws, so guard it.
+local function parseKeyCode(value)
+    if typeof(value) == "EnumItem" then
+        return value
+    end
+    if type(value) ~= "string" or value == "" or value == "None" then
+        return nil
+    end
+    local ok, keyCode = pcall(function()
+        return Enum.KeyCode[value]
+    end)
+    if ok then
+        return keyCode
+    end
+    warn("[AirFlow] unknown key name: " .. value)
+    return nil
+end
+
 local function safeCall(callback, ...)
     if type(callback) ~= "function" then
         return
@@ -563,17 +650,29 @@ local function safeCall(callback, ...)
     end
 end
 
+local MAX_DECIMALS = 6
+
 local function numberFormat(min, max, step)
+    if max < min then
+        min, max = max, min
+    end
+    if not step or step <= 0 then
+        step = 1
+    end
+    -- count decimals numerically: tostring(1e-05) has no dot and 0.1 * 3 is not 0.3
     local decimals = 0
-    local text = tostring(step)
-    local dot = text:find("%.")
-    if dot then
-        decimals = #text - dot
+    while decimals < MAX_DECIMALS do
+        local scaled = step * 10 ^ decimals
+        if math.abs(scaled - math.floor(scaled + 0.5)) < 1e-9 then
+            break
+        end
+        decimals += 1
     end
     local pattern = "%." .. decimals .. "f"
     return {
         snap = function(value)
             value = math.floor(value / step + 0.5) * step
+            value = tonumber(string.format(pattern, value)) or value
             return math.clamp(value, min, max)
         end,
         format = function(value)
@@ -606,12 +705,14 @@ local function titleDesc(parent, name, desc, rightReserve)
     if desc then
         local top = (CARD_HEIGHT_DESC - 38) / 2
         title = label({
+            Name = "Title",
             Position = UDim2.fromOffset(14, top),
             Size = UDim2.new(1, -(14 + rightReserve), 0, 18),
             Text = name,
             Parent = parent,
         })
         descLabel = label({
+            Name = "Desc",
             Position = UDim2.fromOffset(14, top + 20),
             Size = UDim2.new(1, -(14 + rightReserve), 0, 17),
             Text = desc,
@@ -622,6 +723,7 @@ local function titleDesc(parent, name, desc, rightReserve)
         })
     else
         title = label({
+            Name = "Title",
             Position = UDim2.fromOffset(14, 0),
             Size = UDim2.new(1, -(14 + rightReserve), 1, 0),
             Text = name,
@@ -649,6 +751,112 @@ local function reserveRight(title, descLabel, width)
     end
     if descLabel then
         descLabel.Size = UDim2.new(1, -(14 + width), 0, descLabel.Size.Y.Offset)
+    end
+end
+
+attachCommon = function(element, frame, opts)
+    local function findLabel(name)
+        return frame:FindFirstChild(name, true)
+    end
+    if element.SetTitle == nil then
+        function element:SetTitle(text)
+            local title = findLabel("Title")
+            if title then
+                title.Text = tostring(text)
+            end
+        end
+    end
+    if element.SetDesc == nil then
+        function element:SetDesc(text)
+            local desc = findLabel("Desc")
+            if desc then
+                desc.Text = tostring(text)
+            else
+                warn("[AirFlow] SetDesc needs the element to be created with a Desc")
+            end
+        end
+    end
+
+    element.Visible = true
+    function element:SetVisible(visible)
+        element.Visible = visible ~= false
+        frame.Visible = element.Visible
+    end
+
+    element.Locked = false
+    local overlay, reasonLabel
+    function element:SetLocked(locked, reason)
+        element.Locked = locked == true
+        if element.Locked and type(element.SetOpen) == "function" then
+            element:SetOpen(false)
+        end
+        if not overlay then
+            if not element.Locked then
+                return
+            end
+            -- a GuiButton on top sinks every click, hover and drag aimed at the controls beneath
+            overlay = create("TextButton", {
+                Name = "Lock",
+                Size = UDim2.fromScale(1, 1),
+                BackgroundColor3 = Theme.Background,
+                BackgroundTransparency = 1,
+                Text = "",
+                AutoButtonColor = false,
+                ZIndex = 20,
+                Parent = frame,
+            })
+            corner(overlay)
+            local pill = create("Frame", {
+                AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.new(1, -10, 0.5, 0),
+                Size = UDim2.fromOffset(0, CHIP_HEIGHT),
+                AutomaticSize = Enum.AutomaticSize.X,
+                BackgroundColor3 = Theme.Surface,
+                BorderSizePixel = 0,
+                ZIndex = 21,
+                Parent = overlay,
+            })
+            corner(pill, UDim.new(0, 6))
+            stroke(pill)
+            padding(pill, 8, 10)
+            create("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Padding = UDim.new(0, 6),
+                Parent = pill,
+            })
+            local lockIcon = create("ImageLabel", {
+                Size = UDim2.fromOffset(14, 14),
+                BackgroundTransparency = 1,
+                ImageColor3 = Theme.Muted,
+                ScaleType = Enum.ScaleType.Fit,
+                LayoutOrder = 1,
+                ZIndex = 22,
+                Parent = pill,
+            })
+            applyIcon(lockIcon, "lock")
+            reasonLabel = label({
+                Size = UDim2.new(0, 0, 1, 0),
+                AutomaticSize = Enum.AutomaticSize.X,
+                TextSize = 12,
+                TextColor3 = Theme.Muted,
+                TextTruncate = Enum.TextTruncate.None,
+                LayoutOrder = 2,
+                ZIndex = 22,
+                Parent = pill,
+            })
+        end
+        reasonLabel.Text = reason or "Locked"
+        overlay.Visible = element.Locked
+        overlay.BackgroundTransparency = element.Locked and 0.35 or 1
+    end
+
+    if opts.Locked then
+        element:SetLocked(true, opts.LockedReason)
+    end
+    if opts.Visible == false then
+        element:SetVisible(false)
     end
 end
 
@@ -688,12 +896,12 @@ function Tab:Section(text)
         BorderSizePixel = 0,
         Parent = holder,
     })
-    text_:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-        rule.Size = UDim2.new(1, -(text_.AbsoluteSize.X + 14), 0, 1)
-    end)
-    task.defer(function()
-        rule.Size = UDim2.new(1, -(text_.AbsoluteSize.X + 14), 0, 1)
-    end)
+    local window = self.Window
+    local function fitRule()
+        rule.Size = UDim2.new(1, -(text_.AbsoluteSize.X / window.Scale.Scale + 14), 0, 1)
+    end
+    text_:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitRule)
+    task.defer(fitRule)
     return finishElement(self, {}, {
         Set = function(_, value)
             text_.Text = string.upper(value)
@@ -768,12 +976,14 @@ function Tab:Paragraph(opts)
         Parent = frame,
     })
     label({
+        Name = "Title",
         Size = UDim2.new(1, 0, 0, 14),
         Text = opts.Name or "",
         LayoutOrder = 1,
         Parent = frame,
     })
     local content = label({
+        Name = "Content",
         Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
         Text = opts.Content or "",
@@ -788,22 +998,28 @@ function Tab:Paragraph(opts)
     })
     return finishElement(self, opts, {
         Set = function(_, value)
-            content.Text = value
+            content.Text = tostring(value)
+        end,
+        Get = function()
+            return content.Text
         end,
     }, frame, "Paragraph")
 end
 
+local BUTTON_FILLS = { Primary = "Accent", Danger = "Error" }
+
 function Tab:Button(opts)
     opts = normalize(opts, { Title = "Name", Description = "Desc" })
-    local primary = opts.Style == "Primary"
+    local fillKey = BUTTON_FILLS[opts.Style]
+    local primary = fillKey ~= nil
     local height = opts.Desc and CARD_HEIGHT_DESC or CARD_HEIGHT
     local button, buttonStroke = card(self, "TextButton", height, opts)
     button.ClipsDescendants = true
 
     if primary then
-        button.BackgroundColor3 = Theme.Accent
+        button.BackgroundColor3 = Theme[fillKey]
         button.BackgroundTransparency = 0.12
-        buttonStroke.Color = Theme.Accent
+        buttonStroke.Color = Theme[fillKey]
         buttonStroke.Transparency = 0.4
         button.MouseEnter:Connect(function()
             tween(button, { BackgroundTransparency = 0 }, 0.12)
@@ -843,15 +1059,16 @@ function Tab:Button(opts)
     glowIcon(button, BUTTON_HINT_ICON, primary and Theme.AccentDark or Theme.Muted, UDim2.new(1, -30, 0.5, 0))
 
     button.MouseButton1Click:Connect(function()
-        ripple(button)
+        ripple(button, primary and Theme.AccentDark or Theme.Accent)
         safeCall(opts.Callback)
     end)
 
-    return finishElement(self, opts, {
-        SetText = function(_, value)
-            title.Text = value
-        end,
-    }, button, "Button")
+    local handle = {}
+    function handle:SetText(value)
+        title.Text = tostring(value)
+    end
+    handle.SetTitle = handle.SetText
+    return finishElement(self, opts, handle, button, "Button")
 end
 
 function Tab:Toggle(opts)
@@ -898,10 +1115,11 @@ function Tab:Toggle(opts)
         tween(pill, { BackgroundColor3 = on and Theme.Accent or Theme.Surface3 }, duration)
         tween(pillGlow, { ImageTransparency = on and 0.75 or 1 }, duration)
         local knobSize = TOUCH and 18 or 14
+        -- only position gets the bouncy Back easing; a colour pushed past its target flashes a wrong hue
         tween(knob, {
             Position = on and UDim2.new(0, (TOUCH and 44 or 36) - 3 - knobSize, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
-            BackgroundColor3 = on and Theme.AccentDark or Theme.Muted,
         }, duration, Enum.EasingStyle.Back)
+        tween(knob, { BackgroundColor3 = on and Theme.AccentDark or Theme.Muted }, duration)
         if animate then
             tween(knob, { Size = UDim2.fromOffset(knobSize + 4, knobSize - 2) }, 0.08)
             task.delay(0.08, function()
@@ -946,21 +1164,36 @@ end
 
 function Tab:Slider(opts)
     opts = normalize(opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default", Increment = "Step" })
-    local min = opts.Min or 0
-    local max = opts.Max or 100
+    local min = math.min(opts.Min or 0, opts.Max or 100)
+    local max = math.max(opts.Min or 0, opts.Max or 100)
     local step = opts.Step or 1
     local suffix = opts.Suffix or ""
     local numbers = numberFormat(min, max, step)
 
-    local frame, frameStroke = card(self, "Frame", CARD_HEIGHT_DESC, opts)
+    local DESC_EXTRA = 18
+    local cardHeight = CARD_HEIGHT_DESC + (opts.Desc and DESC_EXTRA or 0)
+    local frame, frameStroke = card(self, "Frame", cardHeight, opts)
     hoverStroke(frame, frameStroke)
 
     label({
+        Name = "Title",
         Position = UDim2.fromOffset(14, 12),
         Size = UDim2.new(1, -120, 0, 18),
         Text = opts.Name or "Slider",
         Parent = frame,
     })
+    if opts.Desc then
+        label({
+            Name = "Desc",
+            Position = UDim2.fromOffset(14, 31),
+            Size = UDim2.new(1, -28, 0, 17),
+            Text = opts.Desc,
+            TextSize = 13,
+            FontFace = Fonts.Regular,
+            TextColor3 = Theme.Muted,
+            Parent = frame,
+        })
+    end
 
     local valueChip = create("Frame", {
         AnchorPoint = Vector2.new(1, 0),
@@ -1042,7 +1275,7 @@ function Tab:Slider(opts)
     end)
 
     local track = create("Frame", {
-        Position = UDim2.new(0, 14, 0, CARD_HEIGHT_DESC - 18),
+        Position = UDim2.new(0, 14, 0, cardHeight - 18),
         Size = UDim2.new(1, -28, 0, 5),
         BackgroundColor3 = Theme.Surface3,
         BorderSizePixel = 0,
@@ -1080,7 +1313,7 @@ function Tab:Slider(opts)
     corner(knob, UDim.new(1, 0))
 
     local hit = create("TextButton", {
-        Position = UDim2.new(0, 8, 0, CARD_HEIGHT_DESC - (TOUCH and 37 or 31)),
+        Position = UDim2.new(0, 8, 0, cardHeight - (TOUCH and 37 or 31)),
         Size = UDim2.new(1, -16, 0, TOUCH and 40 or 28),
         BackgroundTransparency = 1,
         Text = "",
@@ -1198,7 +1431,11 @@ function Tab:Slider(opts)
     end
 
     local function updateFromX(x)
-        local frac = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local width = track.AbsoluteSize.X
+        if width <= 0 then
+            return
+        end
+        local frac = math.clamp((x - track.AbsolutePosition.X) / width, 0, 1)
         self_:Set(min + (max - min) * frac)
     end
 
@@ -1222,6 +1459,7 @@ function Tab:Slider(opts)
             dragging = false
             tween(knob, { Size = UDim2.fromOffset(12, 12) }, 0.2)
             tween(knobGlow, { Size = UDim2.fromOffset(28, 28), ImageTransparency = 0.85 }, 0.2)
+            safeCall(opts.OnRelease, self_.Value)
         end
     end, self_)
 
@@ -1288,15 +1526,25 @@ function Tab:Dropdown(opts)
         if measure.TextBounds.X <= maxText then
             return fullText
         end
-        local text = fullText
-        while #text > 1 do
-            text = text:sub(1, -2)
-            measure.Text = text .. ".."
+        -- cut on character boundaries so multi-byte text never ends in half a glyph
+        local characters = utf8.len(fullText)
+        local function prefix(count)
+            if not characters then
+                return fullText:sub(1, count)
+            end
+            return fullText:sub(1, (utf8.offset(fullText, count + 1) or #fullText + 1) - 1)
+        end
+        local low, high = 0, (characters or #fullText) - 1
+        while low < high do
+            local mid = math.ceil((low + high) / 2)
+            measure.Text = prefix(mid) .. ".."
             if measure.TextBounds.X <= maxText then
-                return text .. ".."
+                low = mid
+            else
+                high = mid - 1
             end
         end
-        return ".."
+        return prefix(low) .. ".."
     end
     local function fitChip(instant)
         local width = math.clamp(valueLabel.TextBounds.X + 10 + 34, 60, 190)
@@ -1328,6 +1576,7 @@ function Tab:Dropdown(opts)
     local optionButtons = {}
     local filter = ""
     local SEARCH_THRESHOLD = opts.SearchAfter or 6
+    local emptyText = opts.Placeholder or "None"
 
     local searchHolder = create("Frame", {
         Size = UDim2.new(1, 0, 0, DROPDOWN_OPTION_HEIGHT),
@@ -1389,9 +1638,13 @@ function Tab:Dropdown(opts)
     local function renderValueLabel()
         local value = currentValue()
         if multi then
-            fullText = #value > 0 and table.concat(value, ", ") or "None"
+            local names = {}
+            for index, option in ipairs(value) do
+                names[index] = tostring(option)
+            end
+            fullText = #names > 0 and table.concat(names, ", ") or emptyText
         else
-            fullText = value ~= nil and tostring(value) or "None"
+            fullText = value ~= nil and tostring(value) or emptyText
         end
         valueLabel.Text = trimmed()
         for option, button in pairs(optionButtons) do
@@ -1652,18 +1905,26 @@ function Tab:Input(opts)
     if boxIcon then
         glowIcon(boxHolder, boxIcon, Theme.Muted, UDim2.new(0, 8, 0.5, 0))
     end
+    local maxLength = tonumber(opts.MaxLength)
+    local function clampText(text)
+        text = tostring(text or "")
+        if maxLength and #text > maxLength then
+            return text:sub(1, maxLength)
+        end
+        return text
+    end
     local box = create("TextBox", {
         Position = UDim2.fromOffset(boxIcon and 30 or 8, 0),
         Size = UDim2.new(1, boxIcon and -38 or -16, 1, 0),
         BackgroundTransparency = 1,
-        Text = opts.Default or "",
+        Text = clampText(opts.Default),
         PlaceholderText = opts.Placeholder or "",
         PlaceholderColor3 = Theme.Muted,
         TextColor3 = Theme.Text,
         TextSize = 14,
         FontFace = Fonts.Regular,
         TextXAlignment = Enum.TextXAlignment.Left,
-        ClearTextOnFocus = false,
+        ClearTextOnFocus = opts.ClearOnFocus == true,
         TextTruncate = Enum.TextTruncate.None,
         ClipsDescendants = true,
         Parent = boxHolder,
@@ -1693,7 +1954,15 @@ function Tab:Input(opts)
         fitBox(true)
     end)
     box:GetPropertyChangedSignal("Text"):Connect(function()
+        local clamped = clampText(box.Text)
+        if clamped ~= box.Text then
+            box.Text = clamped
+            return
+        end
         fitBox(false)
+        if box:IsFocused() then
+            safeCall(opts.OnChanged, box.Text)
+        end
     end)
     box:GetPropertyChangedSignal("TextBounds"):Connect(function()
         fitBox(false)
@@ -1709,33 +1978,35 @@ function Tab:Input(opts)
         focused = false
         tween(boxStroke, { Color = Theme.Stroke }, 0.15)
         fitBox(false)
-        if opts.Numeric then
-            local number = tonumber(box.Text)
-            if not number then
-                box.Text = ""
-                return
-            end
+        if opts.Numeric and not tonumber(box.Text) then
+            box.Text = ""
+            return
         end
         safeCall(opts.Callback, box.Text, enterPressed)
     end)
 
-    return finishElement(self, opts, {
-        Set = function(_, value)
-            box.Text = tostring(value)
-            flashStroke(frameStroke)
-        end,
-        Get = function()
-            return box.Text
-        end,
-    }, frame, "Input")
+    local handle = {}
+    function handle:Set(value, silent)
+        box.Text = clampText(value)
+        flashStroke(frameStroke)
+        if not silent then
+            safeCall(opts.Callback, box.Text, false)
+        end
+    end
+    function handle:Get()
+        return box.Text
+    end
+    function handle:SetPlaceholder(text)
+        box.PlaceholderText = tostring(text)
+    end
+    return finishElement(self, opts, handle, frame, "Input")
 end
 
 function Tab:Keybind(opts)
     local frame, frameStroke, _, titleLabel, descLabel
     opts, frame, frameStroke, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentKeybind = "Default", Value = "Default" }, "Frame", 110, "Keybind")
-    if type(opts.Default) == "string" then
-        opts.Default = Enum.KeyCode[opts.Default]
-    end
+    opts.Default = parseKeyCode(opts.Default)
+    local holdMode = opts.Mode == "Hold"
 
     local chip = create("TextButton", {
         AnchorPoint = Vector2.new(1, 0.5),
@@ -1759,7 +2030,7 @@ function Tab:Keybind(opts)
         Parent = chip,
     })
 
-    local self_ = { Value = opts.Default, Listening = false }
+    local self_ = { Value = opts.Default, Listening = false, Held = false }
 
     local function fitChip(instant)
         local width = math.max(chipLabel.TextBounds.X + 20, TOUCH and 44 or 36)
@@ -1780,8 +2051,17 @@ function Tab:Keybind(opts)
         tween(chipLabel, { TextColor3 = self_.Listening and Theme.Accent or Theme.Muted }, 0.15)
     end
 
+    local function release()
+        if self_.Held then
+            self_.Held = false
+            safeCall(opts.Callback, false)
+        end
+    end
+
     function self_:Set(keyCode, silent)
         local wasListening = self_.Listening
+        release()
+        keyCode = parseKeyCode(keyCode)
         self_.Value = keyCode
         self_.Listening = false
         render()
@@ -1802,28 +2082,49 @@ function Tab:Keybind(opts)
         if input.UserInputType ~= Enum.UserInputType.Keyboard then
             return
         end
+        if self_.Listening and UserInputService:GetFocusedTextBox() then
+            self_.Listening = false
+            render()
+            return
+        end
         if self_.Listening then
             self.Window._consumedKey = input.KeyCode
             self.Window._consumedAt = os.clock()
             if input.KeyCode == Enum.KeyCode.Escape then
                 self_.Listening = false
                 render()
+            elseif input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Delete then
+                self_:Set(nil)
             else
                 self_:Set(input.KeyCode)
             end
             return
         end
-        if not gameProcessed and self_.Value ~= nil and input.KeyCode == self_.Value then
+        if gameProcessed or self_.Locked or self_.Value == nil or input.KeyCode ~= self_.Value then
+            return
+        end
+        if holdMode then
+            self_.Held = true
+            safeCall(opts.Callback, true)
+        else
             safeCall(opts.Callback, input.KeyCode)
         end
     end, self_)
+
+    if holdMode then
+        self.Window:_listen("Ended", function(input)
+            if input.KeyCode == self_.Value then
+                release()
+            end
+        end, self_)
+    end
 
     render()
     task.defer(fitChip, true)
     function self_:Get()
         return self_.Value
     end
-    return finishElement(self, opts, self_, frame, "Keybind")
+    return finishElement(self, opts, self_, frame, "Keybind", "OnChanged")
 end
 
 function Tab:ColorPicker(opts)
@@ -1848,6 +2149,7 @@ function Tab:ColorPicker(opts)
         BorderSizePixel = 0,
         Parent = header,
     })
+    swatch:SetAttribute("AirflowNoTheme", true) -- shows the picked colour, which may equal a theme colour
     corner(swatch, UDim.new(0, 6))
     stroke(swatch, Theme.Stroke)
     local arrow = arrowIndicator(header, 1, -12)
@@ -1967,7 +2269,15 @@ function Tab:ColorPicker(opts)
     })
 
     local self_ = { Open = false }
-    local hue, sat, val = Color3.toHSV(opts.Default or Theme.Accent)
+    local initial = opts.Default
+    if type(initial) == "string" then
+        local ok, parsed = pcall(Color3.fromHex, initial)
+        initial = ok and parsed or nil
+    end
+    if typeof(initial) ~= "Color3" then
+        initial = Theme.Accent
+    end
+    local hue, sat, val = Color3.toHSV(initial)
     local dragTarget = nil
 
     local function toHex(color)
@@ -2001,6 +2311,14 @@ function Tab:ColorPicker(opts)
     end
 
     function self_:Set(color, silent)
+        if type(color) == "string" then
+            local ok, parsed = pcall(Color3.fromHex, color)
+            color = ok and parsed or nil
+        end
+        if typeof(color) ~= "Color3" then
+            warn("[AirFlow] ColorPicker:Set expects a Color3 or hex string")
+            return
+        end
         hue, sat, val = Color3.toHSV(color)
         commit(0.25, silent)
         flashStroke(frameStroke)
@@ -2096,8 +2414,8 @@ end
 function Tab:Stepper(opts)
     local frame, frameStroke, _, titleLabel, descLabel
     opts, frame, frameStroke, _, titleLabel, descLabel = beginElement(self, opts, { Title = "Name", Description = "Desc", CurrentValue = "Default", Value = "Default", Increment = "Step" }, "Frame", 150, "Stepper")
-    local min = opts.Min or 0
-    local max = opts.Max or 100
+    local min = math.min(opts.Min or 0, opts.Max or 100)
+    local max = math.max(opts.Min or 0, opts.Max or 100)
     local step = opts.Step or 1
     local suffix = opts.Suffix or ""
     local numbers = numberFormat(min, max, step)
@@ -2201,18 +2519,22 @@ function Tab:Stepper(opts)
             tween(groupStroke, { Color = Theme.Stroke }, 0.2)
         end)
     end
+    local REPEAT_DELAY, REPEAT_INTERVAL = 0.4, 0.07
     local function holdRepeat(button, direction)
+        local pressId = 0
         local holding = false
         button.InputBegan:Connect(function(input)
             if not isPress(input) then
                 return
             end
+            pressId += 1
+            local id = pressId
             holding = true
             bump(direction)
-            task.delay(0.4, function()
-                while holding do
+            task.delay(REPEAT_DELAY, function()
+                while holding and pressId == id and not self_.Locked and not self_._destroyed and button.Parent do
                     bump(direction)
-                    task.wait(0.07)
+                    task.wait(REPEAT_INTERVAL)
                 end
             end)
         end)
@@ -2240,6 +2562,7 @@ function Tab:Progress(opts)
     local top = opts.Desc and (CARD_HEIGHT_DESC - 38) / 2 - 2 or 12
 
     label({
+        Name = "Title",
         Position = UDim2.fromOffset(14, top),
         Size = UDim2.new(1, -110, 0, 18),
         Text = opts.Name or "Progress",
@@ -2247,6 +2570,7 @@ function Tab:Progress(opts)
     })
     if opts.Desc then
         label({
+            Name = "Desc",
             Position = UDim2.fromOffset(14, top + 20),
             Size = UDim2.new(1, -110, 0, 17),
             Text = opts.Desc,
@@ -2334,7 +2658,7 @@ function Tab:ConfigManager(opts)
         Default = window.ConfigName,
         Callback = function(choice)
             if choice then
-                nameInput:Set(choice)
+                nameInput:Set(choice, true)
             end
         end,
     })
@@ -2345,8 +2669,10 @@ function Tab:ConfigManager(opts)
         name = name or list:Get() or window.ConfigName
         local ok, err = window:SaveConfig(name)
         manager:Refresh()
-        list:Set(name, true)
-        window:Notify({ Title = ok and "Config saved" or "Save failed", Content = ok and name or tostring(err), Type = ok and "Success" or "Error", Duration = 3 })
+        if ok then
+            list:Set(window.ConfigName, true)
+        end
+        window:Notify({ Title = ok and "Config saved" or "Save failed", Content = ok and window.ConfigName or tostring(err), Type = ok and "Success" or "Error", Duration = 3 })
     end
     function manager:Load(name)
         name = name or list:Get()
@@ -2392,14 +2718,38 @@ function Tab:ConfigManager(opts)
         Desc = "Save whenever a flagged element changes",
         Default = window._autoSaveEnabled,
         Callback = function(on)
-            window._autoSaveEnabled = on
+            window:SetAutoSave(on)
         end,
     })
     return manager
 end
 
+function Tab:ThemePicker(opts)
+    opts = normalize(opts, { Title = "Name", Description = "Desc" })
+    local callback = opts.Callback
+    return self:Dropdown({
+        Name = opts.Name or "Theme",
+        Desc = opts.Desc,
+        Options = Library:GetThemes(),
+        Default = Library.ThemeName,
+        Flag = opts.Flag,
+        Callback = function(name)
+            if name then
+                Library:SetTheme(name)
+            end
+            safeCall(callback, name)
+        end,
+    })
+end
+
+local NOT_ELEMENTS = { Select = true }
+
+function Tab:Select()
+    self.Window:SelectTab(self)
+end
+
 for name, method in pairs(table.clone(Tab)) do
-    if type(method) == "function" and name:sub(1, 1) ~= "_" and name:sub(1, 6) ~= "Create" then
+    if type(method) == "function" and name:sub(1, 1) ~= "_" and name:sub(1, 6) ~= "Create" and not NOT_ELEMENTS[name] then
         Tab["Create" .. name] = method
     end
 end
@@ -2456,11 +2806,8 @@ local function detectRegion(callback)
     end)
 end
 
-local NOTIFY_COLORS = {
-    Success = Theme.Success,
-    Warning = Theme.Warning,
-    Error = Theme.Error,
-}
+-- Resolved on every toast so a theme switch is picked up.
+local NOTIFY_THEME_KEYS = { Info = "Accent", Success = "Success", Warning = "Warning", Error = "Error" }
 
 local Window = {}
 Window.__index = Window
@@ -2468,14 +2815,15 @@ Window.__index = Window
 function Library.Window(_, opts)
     opts = normalize(opts, { Name = "Title", LoadingSubtitle = "Subtitle", ToggleUIKeybind = "Keybind" })
 
-    if type(opts.Keybind) == "string" then
-        opts.Keybind = Enum.KeyCode[opts.Keybind]
+    if opts.Theme ~= nil then
+        Library:SetTheme(opts.Theme)
     end
     local size = opts.Size or UDim2.fromOffset(640, 480)
-    local keybind = opts.Keybind or Enum.KeyCode.RightControl
+    local keybind = parseKeyCode(opts.Keybind) or Enum.KeyCode.RightControl
 
     local self = setmetatable({
         Tabs = {},
+        Flags = {},
         CurrentTab = nil,
         Open = true,
         Keybind = keybind,
@@ -2583,14 +2931,15 @@ function Library.Window(_, opts)
         Parent = header,
     })
     applyIcon(logo, opts.Icon or Assets.Logo)
-    label({
+    self._logo = logo
+    self._titleLabel = label({
         Position = UDim2.fromOffset(60, 25),
         Size = UDim2.new(1, -70, 0, 20),
         Text = opts.Title or "Airflow",
         TextSize = 20,
         Parent = header,
     })
-    label({
+    self._subtitleLabel = label({
         Position = UDim2.fromOffset(60, 45),
         Size = UDim2.new(1, -70, 0, 14),
         Text = opts.Subtitle or "",
@@ -2612,6 +2961,9 @@ function Library.Window(_, opts)
         Parent = sidebar,
     })
     self.TabList = tabList
+    if TOUCH then
+        tabList:SetAttribute("NoDrag", true)
+    end
     padding(tabList, 16, 16, 4, 4)
     create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
@@ -2777,7 +3129,7 @@ function Library.Window(_, opts)
     if type(saving) == "table" and saving.Enabled ~= false then
         self.ConfigFolder = saving.FolderName or "AirflowUI"
         self.ConfigName = saving.FileName or "default"
-        self._autoSaveEnabled = true
+        self._autoSaveEnabled = saving.AutoSave == true
     else
         self.ConfigFolder = "AirflowUI"
         self.ConfigName = "default"
@@ -2786,6 +3138,10 @@ function Library.Window(_, opts)
 
     table.insert(self._connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then
+            return
+        end
+        if input.KeyCode == Enum.KeyCode.Escape and self._dialog and self._dialog.Dismissable then
+            self._dialog.Cancel()
             return
         end
         if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == self.Keybind then
@@ -2846,6 +3202,154 @@ function Library.Window(_, opts)
 end
 
 Library.CreateWindow = Library.Window
+
+local THEME_SKIP_ATTRIBUTE = "AirflowNoTheme"
+local REMAP_SETTLE_TIME = 0.6
+
+local function remapProperty(object, property, map)
+    local hex = object[property]:ToHex()
+    local replacement = map[hex]
+    if replacement then
+        object[property] = replacement
+    end
+end
+
+local function remapGradient(gradient, map)
+    local changed = false
+    local keypoints = {}
+    for index, keypoint in ipairs(gradient.Color.Keypoints) do
+        local replacement = map[keypoint.Value:ToHex()]
+        if replacement then
+            changed = true
+        end
+        keypoints[index] = ColorSequenceKeypoint.new(keypoint.Time, replacement or keypoint.Value)
+    end
+    if changed then
+        gradient.Color = ColorSequence.new(keypoints)
+    end
+end
+
+local function remapObject(object, map)
+    if object:GetAttribute(THEME_SKIP_ATTRIBUTE) then
+        return
+    end
+    if object:IsA("GuiObject") then
+        remapProperty(object, "BackgroundColor3", map)
+    end
+    if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+        remapProperty(object, "TextColor3", map)
+    end
+    if object:IsA("TextBox") then
+        remapProperty(object, "PlaceholderColor3", map)
+    end
+    if object:IsA("ImageLabel") or object:IsA("ImageButton") then
+        remapProperty(object, "ImageColor3", map)
+    end
+    if object:IsA("ScrollingFrame") then
+        remapProperty(object, "ScrollBarImageColor3", map)
+    end
+    if object:IsA("UIStroke") then
+        remapProperty(object, "Color", map)
+    elseif object:IsA("UIGradient") then
+        remapGradient(object, map)
+    end
+end
+
+local function remapWindows(map)
+    for _, window in ipairs(Library.Windows) do
+        if window.Gui and window.Gui.Parent then
+            for _, object in ipairs(window.Gui:GetDescendants()) do
+                remapObject(object, map)
+            end
+        end
+    end
+end
+
+local function resolveTheme(theme)
+    if type(theme) == "string" then
+        local found = Library.Themes[theme]
+        if not found then
+            warn("[AirFlow] unknown theme: " .. theme)
+            return nil
+        end
+        return table.clone(found), theme
+    elseif type(theme) == "table" then
+        local base = Library.Themes[theme.Base or "Default"] or Library.Themes.Default
+        local merged = table.clone(base)
+        for _, key in ipairs(THEME_KEYS) do
+            if typeof(theme[key]) == "Color3" then
+                merged[key] = theme[key]
+            end
+        end
+        return merged, theme.Name or "Custom"
+    end
+    warn("[AirFlow] SetTheme expects a theme name or a table of colours")
+    return nil
+end
+
+function Library:GetThemes()
+    local names = {}
+    for name in pairs(Library.Themes) do
+        if name ~= "Default" then
+            table.insert(names, name)
+        end
+    end
+    table.sort(names)
+    table.insert(names, 1, "Default")
+    return names
+end
+
+function Library:AddTheme(name, colors)
+    assert(type(name) == "string" and name ~= "", "AddTheme needs a name")
+    local merged = resolveTheme(colors)
+    if merged then
+        Library.Themes[name] = merged
+    end
+    return merged ~= nil
+end
+
+local themeGeneration = 0
+
+-- Recolours live windows by swapping every colour that matched the old palette for its new value.
+function Library:SetTheme(theme)
+    local nextTheme, name = resolveTheme(theme)
+    if not nextTheme then
+        return false
+    end
+    local map, incoming = {}, {}
+    for _, key in ipairs(THEME_KEYS) do
+        incoming[nextTheme[key]:ToHex()] = true
+    end
+    for _, key in ipairs(THEME_KEYS) do
+        local old, new = Theme[key], nextTheme[key]
+        local hex = old:ToHex()
+        if old ~= new and map[hex] == nil then
+            map[hex] = new
+        end
+    end
+    for _, key in ipairs(THEME_KEYS) do
+        Theme[key] = nextTheme[key]
+    end
+    Library.ThemeName = name
+    remapWindows(map)
+
+    -- hover and state tweens already in flight land on old colours; sweep once more after they settle,
+    -- skipping colours the new palette itself uses so they are never remapped twice
+    themeGeneration += 1
+    local generation = themeGeneration
+    local settleMap = {}
+    for hex, color in pairs(map) do
+        if not incoming[hex] then
+            settleMap[hex] = color
+        end
+    end
+    task.delay(REMAP_SETTLE_TIME, function()
+        if generation == themeGeneration then
+            remapWindows(settleMap)
+        end
+    end)
+    return true
+end
 
 
 
@@ -2917,6 +3421,22 @@ function Window:_overControl(point)
     return false
 end
 
+-- Things drawn over the window that are not inside Body: resize grip, toasts, open pill.
+function Window:_overOverlay(point)
+    if self._grip and pointInside(point, self._grip) then
+        return true
+    end
+    if self.OpenButton and self.OpenButton.Visible and pointInside(point, self.OpenButton) then
+        return true
+    end
+    for _, toast in ipairs(self.NotifyHolder:GetChildren()) do
+        if toast:IsA("GuiObject") and pointInside(point, toast) then
+            return true
+        end
+    end
+    return false
+end
+
 function Window:_enableDrag()
     local dragging = false
     local grabOffset = Vector2.zero
@@ -2935,7 +3455,7 @@ function Window:_enableDrag()
             return
         end
         local point = pointerPosition()
-        if not pointInside(point, self.Body) or self:_overControl(point) then
+        if not pointInside(point, self.Body) or self:_overControl(point) or self:_overOverlay(point) then
             return
         end
         dragging = true
@@ -3089,7 +3609,8 @@ function Window:_showLoader(opts)
     })
     applyIcon(logo, opts.Icon or Assets.Logo)
     task.delay(0.15, function()
-        tween(logo, { Size = UDim2.fromScale(0.85, 0.85), Rotation = 0, ImageTransparency = 0 }, 0.6, Enum.EasingStyle.Back)
+        tween(logo, { Size = UDim2.fromScale(0.85, 0.85), Rotation = 0 }, 0.6, Enum.EasingStyle.Back)
+        tween(logo, { ImageTransparency = 0 }, 0.4)
     end)
     label({
         Position = UDim2.fromOffset(78, 30),
@@ -3273,13 +3794,15 @@ function Window:_createOpenButton(opts)
     })
     self.OpenButton = pill
 
+    local DRAG_THRESHOLD = 4
     local dragging, moved = false, false
-    local grab = Vector2.zero
+    local grab, pressedAt = Vector2.zero, Vector2.zero
     pill.InputBegan:Connect(function(input)
         if isPress(input) then
             dragging = true
             moved = false
-            grab = pointerPosition() - pill.AbsolutePosition
+            pressedAt = pointerPosition()
+            grab = pressedAt - pill.AbsolutePosition
         end
     end)
     table.insert(self._connections, UserInputService.InputChanged:Connect(function(input)
@@ -3287,10 +3810,14 @@ function Window:_createOpenButton(opts)
             return
         end
         if isMove(input) then
-            local point = pointerPosition() - grab - gui.AbsolutePosition
-            if (point - (pill.AbsolutePosition - gui.AbsolutePosition)).Magnitude > 3 then
+            local pointer = pointerPosition()
+            if (pointer - pressedAt).Magnitude > DRAG_THRESHOLD then
                 moved = true
             end
+            if not moved then
+                return
+            end
+            local point = pointer - grab - gui.AbsolutePosition
             pill.AnchorPoint = Vector2.new(0, 0)
             pill.Position = UDim2.fromOffset(
                 math.clamp(point.X, 0, math.max(gui.AbsoluteSize.X - pill.AbsoluteSize.X, 0)),
@@ -3319,6 +3846,7 @@ function Window:_enableResize(minSize)
         ZIndex = 20,
         Parent = self.Root,
     })
+    self._grip = grip
     local gripImage = create("ImageLabel", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, -16, 0.5, -16),
@@ -3385,8 +3913,21 @@ function Window:_enableResize(minSize)
     end)
 end
 
+-- Config names come from a text box; keep them to one plain file inside the config folder.
+local function sanitizeFileName(name)
+    name = tostring(name or ""):gsub("[%c/\\:%*%?\"<>|]", ""):gsub("%.%.+", "."):gsub("^[%s%.]+", ""):gsub("[%s%.]+$", "")
+    if name == "" then
+        return nil
+    end
+    return name
+end
+
 local function configPath(self, name)
-    return self.ConfigFolder .. "/" .. name .. ".json"
+    local safe = sanitizeFileName(name)
+    if not safe then
+        return nil, "invalid config name"
+    end
+    return self.ConfigFolder .. "/" .. safe .. ".json", safe
 end
 
 local function fileApiAvailable()
@@ -3414,7 +3955,7 @@ local function deserializeFlag(element, entry, silent)
     local kind = element._type
     local value = entry.Value
     if kind == "Keybind" then
-        element:Set(value and Enum.KeyCode[value] or nil, silent)
+        element:Set(parseKeyCode(value), silent)
     elseif kind == "ColorPicker" then
         if type(value) == "table" then
             element:Set(Color3.new(value[1], value[2], value[3]), silent)
@@ -3425,32 +3966,38 @@ local function deserializeFlag(element, entry, silent)
 end
 
 function Window:SaveConfig(name)
-    name = name or self.ConfigName
     if not fileApiAvailable() then
         return false, "file API unavailable"
     end
-    ensureFolder(self.ConfigFolder)
+    local path, safeName = configPath(self, name or self.ConfigName)
+    if not path then
+        return false, safeName
+    end
     local data = {}
-    for flag, element in pairs(Library.Flags) do
+    for flag, element in pairs(self.Flags) do
         if element._type and type(element.Get) == "function" then
             data[flag] = serializeFlag(element)
         end
     end
     local ok, err = pcall(function()
-        writefile(configPath(self, name), HttpService:JSONEncode(data))
+        ensureFolder(self.ConfigFolder)
+        writefile(path, HttpService:JSONEncode(data))
     end)
     if ok then
-        self.ConfigName = name
+        self.ConfigName = safeName
     end
     return ok, err
 end
 
 function Window:LoadConfig(name, silent)
-    name = name or self.ConfigName
     if not fileApiAvailable() then
         return false, "file API unavailable"
     end
-    local path = configPath(self, name)
+    local path, safeName = configPath(self, name or self.ConfigName)
+    if not path then
+        return false, safeName
+    end
+    name = safeName
     if not isfile(path) then
         return false, "no config named " .. name
     end
@@ -3463,9 +4010,12 @@ function Window:LoadConfig(name, silent)
     local previous = self._autoSaveEnabled
     self._autoSaveEnabled = false
     for flag, entry in pairs(data) do
-        local element = Library.Flags[flag]
+        local element = self.Flags[flag]
         if element and type(element.Set) == "function" and type(entry) == "table" and entry.Type == element._type then
-            pcall(deserializeFlag, element, entry, silent == true)
+            local applied, err = pcall(deserializeFlag, element, entry, silent == true)
+            if not applied then
+                warn("[AirFlow] could not load flag " .. tostring(flag) .. ": " .. tostring(err))
+            end
         end
     end
     self._autoSaveEnabled = previous
@@ -3479,12 +4029,15 @@ function Window:DeleteConfig(name)
     if not fileApiAvailable() or type(delfile) ~= "function" then
         return false, "file API unavailable"
     end
-    local path = configPath(self, name)
-    if not isfile(path) then
-        return false, "no config named " .. name
+    local path, safeName = configPath(self, name)
+    if not path then
+        return false, safeName
     end
-    delfile(path)
-    return true
+    if not isfile(path) then
+        return false, "no config named " .. safeName
+    end
+    local ok, err = pcall(delfile, path)
+    return ok, err
 end
 
 function Window:ListConfigs()
@@ -3500,6 +4053,10 @@ function Window:ListConfigs()
     end
     table.sort(names)
     return names
+end
+
+function Window:SetAutoSave(enabled)
+    self._autoSaveEnabled = enabled == true
 end
 
 function Window:_autoSave()
@@ -3581,24 +4138,34 @@ local function statRow(parent, order, icon, title)
     })
 end
 
+local fadeRest = setmetatable({}, { __mode = "k" })
+
 local function fadeCard(card)
     local parts = {}
+    local function add(object, property)
+        local rest = fadeRest[object]
+        if rest == nil then
+            rest = object[property]
+            fadeRest[object] = rest
+        end
+        table.insert(parts, { object, property, rest })
+    end
     local function collect(object)
         for _, child in ipairs(object:GetChildren()) do
             if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox") then
-                table.insert(parts, { child, "TextTransparency", child.TextTransparency })
+                add(child, "TextTransparency")
             elseif child:IsA("ImageLabel") or child:IsA("ImageButton") then
-                table.insert(parts, { child, "ImageTransparency", child.ImageTransparency })
+                add(child, "ImageTransparency")
             elseif child:IsA("UIStroke") then
-                table.insert(parts, { child, "Transparency", child.Transparency })
+                add(child, "Transparency")
             elseif child:IsA("Frame") then
-                table.insert(parts, { child, "BackgroundTransparency", child.BackgroundTransparency })
+                add(child, "BackgroundTransparency")
             end
             collect(child)
         end
     end
     if card:IsA("Frame") then
-        table.insert(parts, { card, "BackgroundTransparency", card.BackgroundTransparency })
+        add(card, "BackgroundTransparency")
     end
     collect(card)
     for _, part in ipairs(parts) do
@@ -3730,7 +4297,7 @@ function Window:_buildHome(opts)
             Parent = heading,
         })
         local function fitRule()
-            rule.Size = UDim2.new(1, -(headingText.AbsoluteSize.X + 14), 0, 1)
+            rule.Size = UDim2.new(1, -(headingText.AbsoluteSize.X / self.Scale.Scale + 14), 0, 1)
         end
         headingText:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitRule)
         task.defer(fitRule)
@@ -4132,6 +4699,9 @@ function Window:Tab(opts, icon)
         Parent = page,
     })
     padding(list, 24, 24, 2, 24)
+    if TOUCH then
+        list:SetAttribute("NoDrag", true)
+    end
     create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
         Padding = UDim.new(0, 8),
@@ -4178,7 +4748,9 @@ function Window:Tab(opts, icon)
     table.insert(self.Tabs, tab)
     if #self.Tabs == 1 then
         task.defer(function()
-            self:SelectTab(tab)
+            if not self.CurrentTab then
+                self:SelectTab(tab)
+            end
         end)
     end
     return tab
@@ -4203,13 +4775,16 @@ function Window:Dialog(opts)
         ZIndex = 40,
         Parent = self.Body,
     })
-    local card = create("Frame", {
+    -- a button, not a Frame: a non-Active frame lets clicks fall through to the backdrop and cancel
+    local card = create("TextButton", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, 0, 0.5, 10),
         Size = UDim2.fromOffset(WIDTH, 120),
         BackgroundColor3 = Theme.Background,
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
+        Text = "",
+        AutoButtonColor = false,
         ZIndex = 41,
         Parent = overlay,
     })
@@ -4371,11 +4946,16 @@ function Window:Dialog(opts)
         end)
     end
 
-    if opts.CloseOnBackdrop ~= false then
-        overlay.MouseButton1Click:Connect(function()
-            dialog.Close()
-            safeCall(opts.OnCancel)
-        end)
+    function dialog.Cancel()
+        if closed then
+            return
+        end
+        dialog.Close()
+        safeCall(opts.OnCancel)
+    end
+    dialog.Dismissable = opts.CloseOnBackdrop ~= false
+    if dialog.Dismissable then
+        overlay.MouseButton1Click:Connect(dialog.Cancel)
     end
 
     self._dialog = dialog
@@ -4440,7 +5020,15 @@ function Window:_placeIndicator(tab)
 end
 
 function Window:SelectTab(tab)
-    if self.CurrentTab == tab then
+    if type(tab) == "string" then
+        for _, candidate in ipairs(self.Tabs) do
+            if candidate.Name == tab then
+                tab = candidate
+                break
+            end
+        end
+    end
+    if type(tab) ~= "table" or self.CurrentTab == tab then
         return
     end
     local previous = self.CurrentTab
@@ -4557,14 +5145,32 @@ function Window:SetKeepOnScreen(enabled)
 end
 
 function Window:SetKeybind(keyCode)
+    keyCode = parseKeyCode(keyCode)
+    if not keyCode then
+        return
+    end
     self.Keybind = keyCode
     self._keyChipLabel.Text = keyName(keyCode)
+end
+
+function Window:SetTitle(text)
+    self._titleLabel.Text = tostring(text)
+end
+
+function Window:SetSubtitle(text)
+    self._subtitleLabel.Text = tostring(text)
+end
+
+function Window:SetIcon(icon)
+    applyIcon(self._logo, icon)
 end
 
 function Window:Notify(opts)
     opts = normalize(opts, { Text = "Content", Message = "Content", Image = "Icon" })
     local duration = opts.Duration or 4
-    local titleColor = NOTIFY_COLORS[opts.Type] or Theme.Text
+    local typeKey = NOTIFY_THEME_KEYS[opts.Type]
+    local typeColor = typeKey and Theme[typeKey] or Theme.Accent
+    local titleColor = (typeKey and opts.Type ~= "Info") and typeColor or Theme.Text
 
     self._notifyOrder = self._notifyOrder + 1
     local outer = create("Frame", {
@@ -4614,8 +5220,16 @@ function Window:Notify(opts)
     padding(inner, 16, 16, 14, 24)
 
     local titleOffset = 0
+    local edge = create("Frame", {
+        Position = UDim2.fromOffset(0, 14),
+        Size = UDim2.new(0, 2, 1, -28),
+        BackgroundColor3 = typeColor,
+        BorderSizePixel = 0,
+        Parent = toast,
+    })
+    corner(edge, UDim.new(1, 0))
     if opts.Icon then
-        glowIcon(inner, opts.Icon, titleColor == Theme.Text and Theme.Accent or titleColor, UDim2.new(0, 0, 0, 8))
+        glowIcon(inner, opts.Icon, typeColor, UDim2.new(0, 0, 0, 8))
         titleOffset = 24
     end
     label({
@@ -4671,7 +5285,7 @@ function Window:Notify(opts)
     corner(track, UDim.new(1, 0))
     local progress = create("Frame", {
         Size = UDim2.fromScale(1, 1),
-        BackgroundColor3 = Theme.Accent,
+        BackgroundColor3 = typeColor,
         BorderSizePixel = 0,
         Parent = track,
     })
@@ -4739,6 +5353,12 @@ function Window:Destroy()
         connection:Disconnect()
     end
     self._connections = {}
+    for flag, element in pairs(self.Flags) do
+        if Library.Flags[flag] == element then
+            Library.Flags[flag] = nil
+        end
+    end
+    self.Flags = {}
     tween(self.Scale, { Scale = 0.9 }, 0.2)
     tween(self.Body, { GroupTransparency = 1 }, 0.2)
     tween(self.BodyStroke, { Transparency = 1 }, 0.12)
@@ -4755,6 +5375,7 @@ Airflow:LoadFont({ Name = "ValleySans" }) -- downloads the font once into worksp
 local Window = Airflow:CreateWindow({
     Name = "Airflow",
     LoadingSubtitle = "Example",
+    Theme = "Default", -- or "Midnight", "Moss", "Ember", "Rose", "Mono", or a table of colours
     ToggleUIKeybind = "RightControl", -- key that hides and shows the window
     -- examples: "RightShift", "RightControl", "LeftAlt", "Insert", "Home", "F1", "Backquote"
     -- Enum.KeyCode values also work: ToggleUIKeybind = Enum.KeyCode.RightShift
@@ -4767,7 +5388,8 @@ local Window = Airflow:CreateWindow({
                 Name = "Changelog",
                 Icon = "scroll-text",
                 Entries = {
-                    { Title = "v1.2", Tag = "Latest", Changes = { "Added the home tab", "Smaller input boxes that grow", "Faster dropdowns" } },
+                    { Title = "v1.3", Tag = "Latest", Changes = { "Live themes and six presets", "Lock, hide and rename any element", "Hold-mode keybinds" } },
+                    { Title = "v1.2", Tag = "Sep 12", Changes = { "Added the home tab", "Smaller input boxes that grow", "Faster dropdowns" } },
                     { Title = "v1.1", Tag = "Aug 30", Changes = { "Config manager", "Stepper and progress elements" } },
                 },
             },
@@ -4777,12 +5399,12 @@ local Window = Airflow:CreateWindow({
                 Content = "Airflow UI example. Everything on the Elements tab just prints, so you can click around safely.",
             },
         },
-    }
+    },
 })
 
 local Elements = Window:CreateTab({ Name = "Elements", Desc = "One of everything", Icon = "layout-grid" })
 
-Elements:CreateSection("Example section")
+Elements:CreateSection("Buttons")
 
 Elements:CreateButton({
     Name = "Example button",
@@ -4801,7 +5423,25 @@ Elements:CreateButton({
     end,
 })
 
-Elements:CreateToggle({
+Elements:CreateButton({
+    Name = "Example danger button",
+    Style = "Danger",
+    Icon = "trash-2",
+    Callback = function()
+        print("danger button")
+    end,
+})
+
+Elements:CreateButton({
+    Name = "Example locked button",
+    Desc = "Locked elements ignore input until unlocked",
+    Locked = true,
+    LockedReason = "Premium",
+})
+
+Elements:CreateSection("Values")
+
+local ExampleToggle = Elements:CreateToggle({
     Name = "Example toggle",
     Desc = "Example description",
     CurrentValue = false,
@@ -4811,8 +5451,16 @@ Elements:CreateToggle({
     end,
 })
 
+Elements:CreateToggle({
+    Name = "Lock the toggle above",
+    Callback = function(Value)
+        ExampleToggle:SetLocked(Value, "Locked by the switch below")
+    end,
+})
+
 Elements:CreateSlider({
     Name = "Example slider",
+    Desc = "Click the value to type a number",
     Range = { 0, 100 },
     Increment = 1,
     Suffix = "%",
@@ -4826,7 +5474,7 @@ Elements:CreateSlider({
 Elements:CreateStepper({
     Name = "Example stepper",
     Range = { 0, 10 },
-    Increment = 1,
+    Increment = 0.5,
     CurrentValue = 5,
     Flag = "ExampleStepper",
     Callback = function(Value)
@@ -4838,6 +5486,8 @@ Elements:CreateProgress({
     Name = "Example progress",
     CurrentValue = 0.65,
 })
+
+Elements:CreateSection("Choices")
 
 Elements:CreateDropdown({
     Name = "Example dropdown",
@@ -4854,6 +5504,7 @@ Elements:CreateDropdown({
     Options = { "Option 1", "Option 2", "Option 3", "Option 4" },
     MultipleOptions = true,
     CurrentOption = { "Option 1" },
+    Placeholder = "Nothing picked",
     Flag = "ExampleMultiDropdown",
     Callback = function(Options)
         print("multi dropdown", table.concat(Options, ", "))
@@ -4863,7 +5514,11 @@ Elements:CreateDropdown({
 Elements:CreateInput({
     Name = "Example input",
     PlaceholderText = "Type here",
+    MaxLength = 24,
     Flag = "ExampleInput",
+    OnChanged = function(Text)
+        print("typing", Text)
+    end,
     Callback = function(Text, EnterPressed)
         print("input", Text, EnterPressed)
     end,
@@ -4871,10 +5526,21 @@ Elements:CreateInput({
 
 Elements:CreateKeybind({
     Name = "Example keybind",
+    Desc = "Backspace clears it while rebinding",
     CurrentKeybind = "F",
     Flag = "ExampleKeybind",
     Callback = function(Key)
         print("keybind", Key.Name)
+    end,
+})
+
+Elements:CreateKeybind({
+    Name = "Example hold keybind",
+    CurrentKeybind = "LeftAlt",
+    Mode = "Hold",
+    Flag = "ExampleHoldKeybind",
+    Callback = function(Held)
+        print("held", Held)
     end,
 })
 
@@ -4898,18 +5564,20 @@ Elements:CreateParagraph({
 
 local Popups = Window:CreateTab({ Name = "Popups", Desc = "Notifications and dialogs", Icon = "bell" })
 
-Popups:CreateButton({
-    Name = "Example notification",
-    Callback = function()
-        Airflow:Notify({
-            Title = "Example",
-            Content = "Example notification",
-            Icon = "bell",
-            Type = "Success",
-            Duration = 3,
-        })
-    end,
-})
+for _, Type in ipairs({ "Info", "Success", "Warning", "Error" }) do
+    Popups:CreateButton({
+        Name = Type .. " notification",
+        Callback = function()
+            Airflow:Notify({
+                Title = Type,
+                Content = "Example " .. string.lower(Type) .. " notification",
+                Icon = "bell",
+                Type = Type,
+                Duration = 3,
+            })
+        end,
+    })
+end
 
 Popups:CreateButton({
     Name = "Example confirm",
@@ -4945,6 +5613,10 @@ Window:CreateTab({ Name = "Empty", Desc = "Nothing in here", Icon = "package" })
 
 local Settings = Window:CreateTab({ Name = "Settings", Icon = "settings" })
 
+Settings:CreateSection("Interface")
+
+Settings:CreateThemePicker({ Flag = "Theme" })
+
 Settings:CreateKeybind({
     Name = "Toggle UI",
     CurrentKeybind = "RightControl",
@@ -4958,6 +5630,7 @@ Settings:CreateConfigManager({ Name = "Configs" })
 Settings:CreateButton({
     Name = "Unload",
     Icon = "power",
+    Style = "Danger",
     Callback = function()
         Airflow:Confirm({
             Title = "Unload?",
